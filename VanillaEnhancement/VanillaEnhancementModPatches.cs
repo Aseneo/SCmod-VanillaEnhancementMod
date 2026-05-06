@@ -273,6 +273,44 @@ namespace Game {
         }
     }
 
+    // 右键自动穿衣: 拦截 ComponentMiner.Use(), 手持衣物时自动穿戴到对应槽位
+    [HarmonyPatch(typeof(ComponentMiner), nameof(ComponentMiner.Use))]
+    [HarmonyPriority(Priority.HigherThanNormal)]
+    static class RightClickWearClothingPatch {
+        static bool Prefix(ComponentMiner __instance, Ray3 ray, ref bool __result) {
+            if (__instance.Inventory == null) { return true; }
+            int activeSlotIndex = __instance.Inventory.ActiveSlotIndex;
+            if (activeSlotIndex < 0) { return true; }
+            int slotValue = __instance.Inventory.GetSlotValue(activeSlotIndex);
+            Block block = BlocksManager.Blocks[Terrain.ExtractContents(slotValue)];
+            ClothingData clothingData = block.GetClothingData(slotValue);
+            if (clothingData == null) { return true; }
+            ComponentClothing componentClothing = __instance.Entity.FindComponent<ComponentClothing>();
+            if (componentClothing == null) { return true; }
+            if (!componentClothing.CanWearClothing(slotValue)) {
+                __instance.ComponentPlayer?.ComponentGui.DisplaySmallMessage(
+                    "无法穿戴此衣物", Color.White, true, false);
+                __result = true;
+                return false;
+            }
+            if (componentClothing.EnableDressLimit
+                && clothingData.PlayerLevelRequired > __instance.ComponentPlayer?.PlayerData.Level) {
+                __instance.ComponentPlayer.ComponentGui.DisplaySmallMessage(
+                    string.Format(LanguageControl.Get(ComponentClothing.fName, 1),
+                        clothingData.PlayerLevelRequired, clothingData.DisplayName),
+                    Color.White, true, false);
+                __result = true;
+                return false;
+            }
+            clothingData.Mount?.Invoke(slotValue, componentClothing);
+            List<int> list = [..componentClothing.GetClothes(clothingData.Slot), slotValue];
+            componentClothing.SetClothes(clothingData.Slot, list);
+            __instance.Inventory.RemoveSlotItems(activeSlotIndex, 1);
+            __result = true;
+            return false;
+        }
+    }
+
     // 右键吃食物拦截: 拦截 ComponentMiner.Use(), 手持食物时启动长按进食状态机
     [HarmonyPatch(typeof(ComponentMiner), nameof(ComponentMiner.Use))]
     static class RightClickEatPatch {
