@@ -1,6 +1,16 @@
 # VanillaEnhancement - 原版内容辅助增强
 
-Survivalcraft API 1.9.0.2 增强型模组，为原版游戏添加一系列 QoL 辅助功能和测试工具。
+## 项目介绍
+
+### AI创作警告
+- 本项目为 AI 创作，不包含任何人工修改。
+- 本项目仅用于学习和研究，不包含任何商业用途。
+- 使用agent工具：Trae CN
+- 使用模型：deepseek-v4-pro
+
+## 模组功能
+
+本模组VanillaEnhancement为基于Survivalcraft API 1.9.0.2 创作的增强型模组，为原版游戏添加了一系列 QoL 辅助功能和测试工具。
 
 ## 目录结构
 
