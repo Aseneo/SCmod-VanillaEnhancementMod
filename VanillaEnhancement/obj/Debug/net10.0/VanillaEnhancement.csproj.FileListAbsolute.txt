@@ -1,0 +1,15 @@
+F:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.csproj.AssemblyReference.cache
+F:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.GeneratedMSBuildEditorConfig.editorconfig
+F:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.csproj.CoreCompileInputs.cache
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\Assets\InstantKillSpearBlocksData.csv
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\Assets\Lang\en-US.json
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\Assets\Lang\zh-CN.json
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\Assets\VanillaEnhancementDatabase.xdb
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\Assets\Widgets\TimeDisplayWidget.xml
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\modinfo.json
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\VanillaEnhancement.dll
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\VanillaEnhancement.pdb
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.dll
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\refint\VanillaEnhancement.dll
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.pdb
+f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\ref\VanillaEnhancement.dll

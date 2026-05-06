@@ -1,0 +1,15 @@
+{
+  "$schema": "https://gitee.com/SC-SPM/SurvivalcraftApi/raw/SCAPI1.9/Survivalcraft/Content/modinfo-scheme.json",
+  "Name": "原版内容辅助增强",
+  "Version": "0.1",
+  "ApiVersion": "1.9.0.2",
+  "Description": "Adds time-until-nightfall/daybreak/full-moon display, manual R-key musket reload with cooldown overlay, and an instant-kill test spear.",
+  "ScVersion": "2.4.0.0",
+  "LoadOrder": 10000,
+  "NonPersistentMod": false,
+  "GameplayImpactLevel": "Turbo",
+  "Link": "",
+  "Author": "",
+  "PackageName": "com.vanillaenhancement.test",
+  "Dependencies": {}
+}

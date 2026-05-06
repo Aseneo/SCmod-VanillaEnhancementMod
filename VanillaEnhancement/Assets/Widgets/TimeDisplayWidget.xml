@@ -1,0 +1,3 @@
+<TimeDisplayWidget xmlns="runtime-namespace:Game" HorizontalAlignment="Center" VerticalAlignment="Near" MarginTop="10">
+  <LabelWidget Name="TimeLabel" Text="距离天黑: --:--" FontScale="1.1" DropShadow="true" />
+</TimeDisplayWidget>
