@@ -17,6 +17,7 @@ namespace Game {
 
         // 游戏所有资源加载完毕后触发
         public override void OnLoadingFinished(List<Action> actions) {
+            TimeDisplayConfig.Load();
             Log.Information("Vanilla Enhancement Mod: Game Loaded.");
         }
     }

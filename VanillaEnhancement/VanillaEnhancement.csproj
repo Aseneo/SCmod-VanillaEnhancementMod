@@ -37,6 +37,7 @@
         <Compile Include="VanillaEnhancementModLoader.cs"/>
         <Compile Include="VanillaEnhancementModPatches.cs"/>
         <Compile Include="TimeDisplayWidget.cs"/>
+        <Compile Include="TimeDisplayConfig.cs"/>
         <Compile Include="ComponentTimeDisplay.cs"/>
         <Compile Include="ComponentMusketAutoReload.cs"/>
         <Compile Include="ComponentEating.cs"/>
