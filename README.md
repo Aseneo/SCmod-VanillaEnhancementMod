@@ -21,7 +21,8 @@ VanillaEnhancement/
     ├── modinfo.json                         # 模组元数据
     ├── VanillaEnhancement.csproj            # .NET 10 项目文件
     ├── VanillaEnhancementModLoader.cs       # 模组入口: 注册钩子 + Harmony 激活
-    ├── VanillaEnhancementModPatches.cs      # 全部 Harmony 补丁 (七大功能)
+    ├── VanillaEnhancementModPatches.cs      # 全部 Harmony 补丁 (九大功能)
+    ├── TimeDisplayConfig.cs                 # 时间显示配置文件系统
     ├── ComponentTimeDisplay.cs              # 时间显示组件 (注入 GUI)
     ├── TimeDisplayWidget.cs                 # 昼夜/月相倒计时控件
     ├── ComponentMusketAutoReload.cs         # 武器 R 键快速装填组件
@@ -30,8 +31,6 @@ VanillaEnhancement/
     └── Assets/
         ├── VanillaEnhancementDatabase.xdb   # 数据库: 组件注册
         ├── InstantKillSpearBlocksData.csv   # 方块表: 秒杀矛注册
-        ├── Widgets/
-        │   └── TimeDisplayWidget.xml        # 时间控件布局
         └── Lang/
             ├── zh-CN.json
             └── en-US.json
@@ -41,11 +40,31 @@ VanillaEnhancement/
 
 ### 1. 昼夜/月圆时间显示
 
-- **文件**: [ComponentTimeDisplay.cs](VanillaEnhancement/ComponentTimeDisplay.cs) + [TimeDisplayWidget.cs](VanillaEnhancement/TimeDisplayWidget.cs)
-- **效果**: 屏幕顶部居中显示时间倒计时
-- **白天**: `距离天黑: X:XX`（天黑前 15% 变红）
-- **夜晚（月圆）**: `距月圆之夜结束还剩: X:XX`（金色，MoonPhase 0 或 4）
-- **夜晚（普通）**: `距离天亮: X:XX`（淡蓝色）
+- **文件**: [TimeDisplayConfig.cs](VanillaEnhancement/TimeDisplayConfig.cs) + [ComponentTimeDisplay.cs](VanillaEnhancement/ComponentTimeDisplay.cs) + [TimeDisplayWidget.cs](VanillaEnhancement/TimeDisplayWidget.cs)
+- **效果**: 屏幕左下角显示时间倒计时（位置、颜色均可通过配置文件调整）
+- **白天**: `距离天黑: X:XX`（天黑前 15% 变警告色）
+- **夜晚（月圆）**: `距月圆之夜结束还剩: X:XX`（MoonPhase 0 或 4）
+- **夜晚（普通）**: `距离天亮: X:XX`（天亮前 15% 变警告色）
+
+#### 配置文件
+
+首次运行后自动在游戏 `Mods/` 文件夹生成 `VanillaEnhancementConfig.json`，修改后重启游戏即可生效：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `HorizontalAlignment` | `"Near"` | 水平对齐：`Near`/`Center`/`Far`/`Stretch` 或 0-3 |
+| `VerticalAlignment` | `"Far"` | 垂直对齐：`Near`/`Center`/`Far`/`Stretch` 或 0-3 |
+| `MarginLeft` | `10` | 左边距（像素） |
+| `MarginBottom` | `10` | 下边距（像素） |
+| `FontScale` | `1.1` | 字体缩放 |
+| `DropShadow` | `true` | 文字阴影 |
+| `DuskCountdownColor` | `"255,255,255"` | 距离天黑倒计时颜色 |
+| `DuskWarningColor` | `"255,80,80"` | 天黑前 15% 警告颜色 |
+| `DawnCountdownDayColor` | `"180,200,255"` | 距离天亮倒计时颜色 |
+| `DawnCountdownNightColor` | `"80,160,255"` | 天亮前 15% 警告颜色 |
+| `FullMoonCountdownColor` | `"255,200,80"` | 月圆之夜结束倒计时颜色 |
+
+颜色格式为 `"R,G,B"`，如 `"255,255,255"` 表示白色。删除配置文件后重启游戏将自动重新生成默认配置。
 
 ### 2. R 键快速装填武器
 
@@ -78,18 +97,27 @@ VanillaEnhancement/
 - **打断**: 松右键 / 换物品 / 切换槽位 → 自动取消
 - **兼容**: 原版拖拽衣服界面吃食物方式保留不变
 
-### 5. 秒杀测试矛
+### 5. 右键自动穿衣
+
+- **文件**: [VanillaEnhancementModPatches.cs](VanillaEnhancement/VanillaEnhancementModPatches.cs) `RightClickWearClothingPatch`
+- **触发**: 手持衣物（ClothingBlock）→ 点按右键
+- **逻辑**: 自动将衣物穿戴到对应的衣物槽位（头部/躯干/腿部/脚部）
+- **层级检查**: 外层衣物 Layer 必须大于已穿戴衣物，否则显示"无法穿戴此衣物"
+- **等级检查**: 生存模式下等级不足时提示所需等级
+- **兼容**: 与右键吃食物功能通过 `HarmonyPriority` 区分优先级，衣物优先检查，互不冲突
+
+### 6. 秒杀测试矛
 
 - **文件**: [InstantKillSpearBlock.cs](VanillaEnhancement/InstantKillSpearBlock.cs)
 - **属性**: 继承 `SpearBlock`，使用铁矛纹理和模型，攻击力 9999，无投掷
 - **效果**: 左键击中生物时秒杀 + 显示该生物的有效血量上限
 
-### 6. 缺失材料提示
+### 7. 缺失材料提示
 
 - **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs) `ShowMissingMessage()`
 - 按 R 装填时逐项检查所需材料，首次缺失即闪烁提示 `没有可用的 XX`
 
-### 7. 已装填状态提示
+### 8. 已装填状态提示
 
 - **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs) `ShowLoadedMessage()`
 - 武器已装填时按 R 显示 `XX 已装填`，名称通过 `LanguageControl.Get()` 读取原版语言文件
@@ -118,7 +146,17 @@ VanillaEnhancement/
 | CrossbowFireDetectionPatch | SubsystemCrossbowBlockBehavior.OnAim | 弩发射→记录冷却 |
 | BowFireDetectionPatch | SubsystemBowBlockBehavior.OnAim | 弓发射→记录冷却 |
 | InstantKillSpearHitPatch | ComponentMiner.Hit | 秒杀矛命中→秒杀+显示血量 |
+| RightClickWearClothingPatch | ComponentMiner.Use | 右键手持衣物→自动穿戴 |
 | RightClickEatPatch | ComponentMiner.Use | 右键手持食物→启动进食 |
+
+### 配置文件系统
+
+首次运行后自动在游戏 `Mods/` 文件夹生成 `VanillaEnhancementConfig.json`。
+
+- **文件**: [TimeDisplayConfig.cs](VanillaEnhancement/TimeDisplayConfig.cs)
+- **加载时机**: `OnLoadingFinished` 钩子中调用 `TimeDisplayConfig.Load()`
+- **容错**: 配置文件缺失或解析失败时自动生成默认配置，不影响游戏运行
+- **格式**: JSON，颜色为 `"R,G,B"` 字符串，对齐方式支持字符串名（如 `"Near"`）或数字（0-3）
 
 ### 方块注册 (csv)
 
