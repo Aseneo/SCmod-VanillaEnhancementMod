@@ -1,5 +1,19 @@
 # 更新日志
 
+## v0.0.7 — 2026-05-10
+
+### 修改
+- **时间显示重构**: 从"距离 XX: X:XX"改为"当前时段名称 + 结束倒计时"格式（黎明/白昼/黄昏/夜晚/月圆之夜 HH:MM），每个时段颜色独立配置。
+- **配置文件颜色字段**: 旧的倒计时颜色（`DuskCountdownColor` 等）替换为时段颜色（`DawnSegmentColor`、`DaySegmentColor`、`DuskSegmentColor`、`NightSegmentColor`、`FullMoonNightColor`）。
+- **长按装填延迟**: 首次自动装填延迟从 0.08s 延长至 0.50s，减少误触发。
+- **装填状态记忆优化**: `s_loadedOnce` 以武器类型为键记录首次成功装填状态，满弹后反复按 R 不再误报。
+
+### 修复
+- `s_loadedOnce` 以 `(wc << 16 | data)` 为键时因发射后 data 变化导致状态检测失效。
+- `IsAlreadyLoaded` 在 `s_getArrowType` 命中但返回 null 时提前退出，阻断兜底扫描导致部分模组武器满弹误报。
+
+---
+
 ## v0.0.6 — 2026-05-06~05-09
 
 ### 新增

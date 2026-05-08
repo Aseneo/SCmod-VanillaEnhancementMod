@@ -39,13 +39,15 @@ VanillaEnhancement/
 
 ## 功能详解
 
-### 1. 昼夜/月圆时间显示
+### 1. 昼夜时间显示（当前时段 + 结束倒计时）
 
 - **文件**: [TimeDisplayConfig.cs](VanillaEnhancement/TimeDisplayConfig.cs) + [ComponentTimeDisplay.cs](VanillaEnhancement/ComponentTimeDisplay.cs) + [TimeDisplayWidget.cs](VanillaEnhancement/TimeDisplayWidget.cs)
-- **效果**: 屏幕左下角显示时间倒计时（位置、颜色均可通过配置文件调整）
-- **白天**: `距离天黑: X:XX`（天黑前 15% 变警告色）
-- **夜晚（月圆）**: `距月圆之夜结束还剩: X:XX`（MoonPhase 0 或 4）
-- **夜晚（普通）**: `距离天亮: X:XX`（天亮前 15% 变警告色）
+- **效果**: 屏幕左下角显示当前时间段名称 + 到该时段结束的倒计时（位置、颜色均可通过配置文件调整）
+- **黎明**: `黎明 HH:MM`（暖橙色，DawnStart → DayStart）
+- **白昼**: `白昼 HH:MM`（白色，DayStart → DuskStart）
+- **黄昏**: `黄昏 HH:MM`（橙红色，DuskStart → NightStart）
+- **夜晚（普通）**: `夜晚 HH:MM`（淡蓝色，NightStart → DawnStart）
+- **夜晚（月圆）**: `月圆之夜 HH:MM`（金色，MoonPhase 0 或 4）
 
 #### 配置文件
 
@@ -59,11 +61,11 @@ VanillaEnhancement/
 | `MarginBottom` | `10` | 下边距（像素） |
 | `FontScale` | `1.1` | 字体缩放 |
 | `DropShadow` | `true` | 文字阴影 |
-| `DuskCountdownColor` | `"255,255,255"` | 距离天黑倒计时颜色 |
-| `DuskWarningColor` | `"255,80,80"` | 天黑前 15% 警告颜色 |
-| `DawnCountdownDayColor` | `"180,200,255"` | 距离天亮倒计时颜色 |
-| `DawnCountdownNightColor` | `"80,160,255"` | 天亮前 15% 警告颜色 |
-| `FullMoonCountdownColor` | `"255,200,80"` | 月圆之夜结束倒计时颜色 |
+| `DawnSegmentColor` | `"255,200,128"` | 黎明时段颜色 |
+| `DaySegmentColor` | `"255,255,255"` | 白昼时段颜色 |
+| `DuskSegmentColor` | `"255,140,60"` | 黄昏时段颜色 |
+| `NightSegmentColor` | `"140,180,255"` | 夜晚时段颜色 |
+| `FullMoonNightColor` | `"255,210,80"` | 月圆之夜时段颜色 |
 | `EnableReloadCooldown` | `true` | 启用装填冷却（检测到模组武器时自动禁用） |
 
 ### 2. R 键快速装填武器
@@ -71,7 +73,7 @@ VanillaEnhancement/
 - **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs) + [VanillaEnhancementModPatches.cs](VanillaEnhancement/VanillaEnhancementModPatches.cs)
 - **支持武器**: 火枪、弩、弓（含原版子类 + 模组武器，通过三级检测自动适配）
 - **优先使用官方 Behavior API**: 装填逻辑委托给武器的 `SubsystemBlockBehavior`，通过 `GetProcessInventoryItemCapacity` + `ProcessInventoryItem` 保证与游戏原版行为一致，并自动兼容有自定义 behavior 的模组武器
-- **长按 R 键持续装填**: 首次 0.08s 延迟后每 0.04s 递进一步，60 发步枪约 2.5s 装满
+- **长按 R 键持续装填**: 长按 0.5s 后启动自动装填，之后每 0.04s 递进一步，60 发步枪约 2.9s 装满
 - **弹药搜索顺序**: 从武器槽位右侧开始环绕搜索，同行靠右、同列靠上的弹药优先
 - **创造模式优化**: 只搜索快捷栏（VisibleSlotsCount ≤ 10），避免扫描全物品目录
 - **状态提示**: 缺失材料 `没有可用的 XX` / 已装填 `XX 已装填` / 冷却中 `装填冷却中！`

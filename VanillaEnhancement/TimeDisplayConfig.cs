@@ -10,11 +10,11 @@ namespace Game {
         public float MarginBottom { get; set; } = 10f;
         public float FontScale { get; set; } = 1.1f;
         public bool DropShadow { get; set; } = true;
-        public string DuskCountdownColor { get; set; } = "255,255,255";
-        public string DuskWarningColor { get; set; } = "255,80,80";
-        public string DawnCountdownDayColor { get; set; } = "180,200,255";
-        public string DawnCountdownNightColor { get; set; } = "80,160,255";
-        public string FullMoonCountdownColor { get; set; } = "255,200,80";
+        public string DawnSegmentColor { get; set; } = "255,200,128";
+        public string DaySegmentColor { get; set; } = "255,255,255";
+        public string DuskSegmentColor { get; set; } = "255,140,60";
+        public string NightSegmentColor { get; set; } = "140,180,255";
+        public string FullMoonNightColor { get; set; } = "255,210,80";
         public bool EnableReloadCooldown { get; set; } = true;
     }
 
@@ -25,11 +25,11 @@ namespace Game {
         public static float MarginBottom = 10f;
         public static float FontScale = 1.1f;
         public static bool DropShadow = true;
-        public static Color DuskCountdownColor = Color.White;
-        public static Color DuskWarningColor = new Color(255, 80, 80);
-        public static Color DawnCountdownDayColor = new Color(180, 200, 255);
-        public static Color DawnCountdownNightColor = new Color(80, 160, 255);
-        public static Color FullMoonCountdownColor = new Color(255, 200, 80);
+        public static Color DawnSegmentColor = new Color(255, 200, 128);
+        public static Color DaySegmentColor = Color.White;
+        public static Color DuskSegmentColor = new Color(255, 140, 60);
+        public static Color NightSegmentColor = new Color(140, 180, 255);
+        public static Color FullMoonNightColor = new Color(255, 210, 80);
         public static bool EnableReloadCooldown = true;
 
         public static string ConfigPath => Storage.CombinePaths(ModsManager.ModsPath, "VanillaEnhancementConfig.json");
@@ -66,11 +66,11 @@ namespace Game {
             MarginBottom = data.MarginBottom;
             FontScale = data.FontScale;
             DropShadow = data.DropShadow;
-            DuskCountdownColor = ParseColor(data.DuskCountdownColor, Color.White);
-            DuskWarningColor = ParseColor(data.DuskWarningColor, new Color(255, 80, 80));
-            DawnCountdownDayColor = ParseColor(data.DawnCountdownDayColor, new Color(180, 200, 255));
-            DawnCountdownNightColor = ParseColor(data.DawnCountdownNightColor, new Color(80, 160, 255));
-            FullMoonCountdownColor = ParseColor(data.FullMoonCountdownColor, new Color(255, 200, 80));
+            DawnSegmentColor = ParseColor(data.DawnSegmentColor, new Color(255, 200, 128));
+            DaySegmentColor = ParseColor(data.DaySegmentColor, Color.White);
+            DuskSegmentColor = ParseColor(data.DuskSegmentColor, new Color(255, 140, 60));
+            NightSegmentColor = ParseColor(data.NightSegmentColor, new Color(140, 180, 255));
+            FullMoonNightColor = ParseColor(data.FullMoonNightColor, new Color(255, 210, 80));
             EnableReloadCooldown = data.EnableReloadCooldown;
         }
 

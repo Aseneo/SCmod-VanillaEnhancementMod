@@ -1,4 +1,4 @@
-// 昼夜时间显示控件: 在屏幕指定位置显示天黑/天亮/月圆之夜倒计时, 位置和颜色可通过配置文件自定义
+// 昼夜时间显示控件: 在屏幕指定位置显示当前时间段+结束倒计时, 位置和颜色可通过配置文件自定义
 using Engine;
 using GameEntitySystem;
 
@@ -24,54 +24,53 @@ namespace Game {
         public override void Update() {
             if (m_subsystemTimeOfDay == null) {
                 Project project = GameManager.Project;
-                if (project == null) {
-                    return;
-                }
+                if (project == null) return;
                 m_subsystemTimeOfDay = project.FindSubsystem<SubsystemTimeOfDay>();
                 m_subsystemSky = project.FindSubsystem<SubsystemSky>();
-                if (m_subsystemTimeOfDay == null) {
-                    return;
-                }
+                if (m_subsystemTimeOfDay == null) return;
             }
-            float timeOfDay = m_subsystemTimeOfDay.TimeOfDay;
-            float duskStart = m_subsystemTimeOfDay.DuskStart;
-            float dawnStart = m_subsystemTimeOfDay.DawnStart;
-            float dayStart = m_subsystemTimeOfDay.DayStart;
-            float dayDuration = m_subsystemTimeOfDay.DayDuration;
+            float t = m_subsystemTimeOfDay.TimeOfDay;
+            float ds = m_subsystemTimeOfDay.DayStart;
+            float dus = m_subsystemTimeOfDay.DuskStart;
+            float ns = m_subsystemTimeOfDay.NightStart;
+            float das = m_subsystemTimeOfDay.DawnStart;
+            float dd = m_subsystemTimeOfDay.DayDuration;
 
-            if (timeOfDay >= dawnStart && timeOfDay < duskStart) {
-                float interval = duskStart - timeOfDay;
-                float secondsLeft = interval * dayDuration;
-                int hours = (int)(secondsLeft / 60f);
-                int minutes = (int)(secondsLeft % 60f);
-                m_label.Text = string.Format("距离天黑: {0}:{1:D2}", hours, minutes);
-                m_label.Color = interval < 0.15f ? TimeDisplayConfig.DuskWarningColor : TimeDisplayConfig.DuskCountdownColor;
-            }
-            else {
-                int moonPhase = m_subsystemSky != null ? m_subsystemSky.MoonPhase : -1;
-                if (moonPhase == 0 || moonPhase == 4) {
-                    float interval = dawnStart - timeOfDay;
-                    if (interval < 0f) {
-                        interval += 1f;
-                    }
-                    float secondsLeft = interval * dayDuration;
-                    int hours = (int)(secondsLeft / 60f);
-                    int minutes = (int)(secondsLeft % 60f);
-                    m_label.Text = string.Format("距月圆之夜结束还剩: {0}:{1:D2}", hours, minutes);
-                    m_label.Color = TimeDisplayConfig.FullMoonCountdownColor;
+            string segment;
+            float nextStart;
+            Color color;
+
+            if (t >= das && t < ds) {
+                segment = "黎明";
+                nextStart = ds;
+                color = TimeDisplayConfig.DawnSegmentColor;
+            } else if (t >= ds && t < dus) {
+                segment = "白昼";
+                nextStart = dus;
+                color = TimeDisplayConfig.DaySegmentColor;
+            } else if (t >= dus && t < ns) {
+                segment = "黄昏";
+                nextStart = ns;
+                color = TimeDisplayConfig.DuskSegmentColor;
+            } else {
+                int mp = m_subsystemSky != null ? m_subsystemSky.MoonPhase : -1;
+                if (mp == 0 || mp == 4) {
+                    segment = "月圆之夜";
+                    color = TimeDisplayConfig.FullMoonNightColor;
+                } else {
+                    segment = "夜晚";
+                    color = TimeDisplayConfig.NightSegmentColor;
                 }
-                else {
-                    float interval = dawnStart - timeOfDay;
-                    if (interval < 0f) {
-                        interval += 1f;
-                    }
-                    float secondsLeft = interval * dayDuration;
-                    int hours = (int)(secondsLeft / 60f);
-                    int minutes = (int)(secondsLeft % 60f);
-                    m_label.Text = string.Format("距离天亮: {0}:{1:D2}", hours, minutes);
-                    m_label.Color = interval < 0.15f ? TimeDisplayConfig.DawnCountdownNightColor : TimeDisplayConfig.DawnCountdownDayColor;
-                }
+                nextStart = das;
             }
+
+            float remain = nextStart - t;
+            if (remain < 0f) remain += 1f;
+            float secs = remain * dd;
+            int h = (int)(secs / 60f);
+            int m = (int)(secs % 60f);
+            m_label.Text = string.Format("{0} {1}:{2:D2}", segment, h, m);
+            m_label.Color = color;
         }
     }
 }

@@ -23,14 +23,14 @@ namespace Game {
         public static Dictionary<int, MethodInfo> s_setDraw = new();
         // 兜底: 任意 Get*Type(int) 方法缓存(用于检测已装填)
         public static Dictionary<int, MethodInfo> s_anyTypeGetter = new();
-        // 持久记录已确认装填的武器值: (wc << 16 | data) → true, 跨次按键保持
+        // 持久记录已确认装填过的武器类型(wc), 跨按键保持. 条件: behavior 曾成功处理过弹药
         public static HashSet<int> s_loadedOnce = new();
 
         // 长按持续装填
         public float m_reloadTimer;
         public int m_reloadWeaponSlot = -1;
         public bool m_didProcessThisHold;
-        public const float FirstDelay = 0.08f;
+        public const float FirstDelay = 0.50f;
         public const float RepeatDelay = 0.04f;
 
         public static BindingFlags s_sf = BindingFlags.Public | BindingFlags.Static;
@@ -87,7 +87,6 @@ namespace Game {
         // 执行一次装填步骤, 返回 true 表示成功递进了
         bool ProcessSingleStep(IInventory inv, int slot, int wc, int sv, Block block, SubsystemBlockBehavior[] wb, ReloadPattern p) {
             int data = Terrain.ExtractData(sv);
-            int oldKey = (wc << 16) | data;
             float cd = MusketCooldownTracker.GetCooldownRemaining(inv, slot);
             bool ok;
             if (p == ReloadPattern.Crossbow) {
@@ -96,16 +95,15 @@ namespace Game {
             } else {
                 ok = TryProcessAmmo(inv, slot, wc, data, p, wb, cd);
             }
-            if (ok) s_loadedOnce.Remove(oldKey);
+            if (ok) s_loadedOnce.Add(wc);
             return ok;
         }
 
         // 停止持续装填时显示最终状态
         void ShowFinalStatus(IInventory inv, int slot, int wc, int sv, Block block, ReloadPattern p) {
             int data = Terrain.ExtractData(sv);
-            bool loaded = m_didProcessThisHold || IsAlreadyLoaded(wc, data, block) || s_loadedOnce.Contains((wc << 16) | data);
+            bool loaded = m_didProcessThisHold || IsAlreadyLoaded(wc, data, block) || s_loadedOnce.Contains(wc);
             if (loaded) {
-                s_loadedOnce.Add((wc << 16) | data);
                 ShowLoaded(block.GetDisplayName(m_subsystemTerrain, Terrain.MakeBlockValue(wc, 0, data)));
             }
             else if (p == ReloadPattern.Musket) {
@@ -162,7 +160,6 @@ namespace Game {
             if (s_getArrowType.TryGetValue(wc, out var ma) && ma != null) {
                 object at = ma.Invoke(null, [data]);
                 if (at != null) return !s_getDraw.ContainsKey(wc) || (int)s_getDraw[wc].Invoke(null, [data]) >= 15;
-                return false;
             }
 
             // 兜底扫描
