@@ -105,7 +105,15 @@ VanillaEnhancement/
 
 #### 模组武器自动禁用冷却
 
-检测到非原版武器（通过 behavior 或反射路径匹配）时，自动禁用装填冷却以保持公平。
+三级检测链，从启动到运行全覆盖：
+
+| 级别 | 触发时机 | 检测方式 |
+|------|---------|------|
+| 1 | `OnLoadingFinished` 游戏加载完成 | `ScanForModWeapons()` 遍历 `BlocksManager.Blocks`，检测非原版火枪/弩/弓子类 |
+| 2 | 首次按 R 接触模组武器 | `DetectPattern` 的 behavior 绑定 + 反射方法签名路径 |
+| 3 | 实际装填成功 | `TryProcessAmmo` 中检测处理装填的 behavior 是否三个原版类之一 |
+
+检测到模组武器时立即调用 `MarkModWeapon()` 设置 `CooldownEnabled = false`，原版武器不受影响。
 
 ### 4. 装填冷却系统
 

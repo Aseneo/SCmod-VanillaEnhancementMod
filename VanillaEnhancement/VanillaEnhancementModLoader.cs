@@ -19,6 +19,7 @@ namespace Game {
         public override void OnLoadingFinished(List<Action> actions) {
             TimeDisplayConfig.Load();
             MusketCooldownTracker.CooldownEnabled = TimeDisplayConfig.EnableReloadCooldown;
+            if (MusketCooldownTracker.CooldownEnabled) ComponentMusketAutoReload.ScanForModWeapons();
             Log.Information("Vanilla Enhancement Mod: Game Loaded.");
         }
     }

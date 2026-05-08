@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.0.8 — 2026-05-10
+
+### 修改
+- **模组武器冷却禁用优化**: 新增 `ScanForModWeapons()` 全局方块扫描，游戏加载时遍历 `BlocksManager.Blocks`，检测到非原版的火枪/弩/弓子类时立即禁用装填冷却。
+
+### 修复
+- `DetectPattern` 第一级分支（`block is XxxBlock`）对继承原版武器的模组子类未调用 `MarkModWeapon()`，导致 `class ModShotgun : MusketBlock` 等继承型武器不触发冷却禁用。
+
+---
+
 ## v0.0.7 — 2026-05-10
 
 ### 修改

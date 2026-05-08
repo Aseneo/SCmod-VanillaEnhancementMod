@@ -130,6 +130,9 @@ namespace Game {
                     if (bh.GetProcessInventoryItemCapacity(inv, slot, isv) > 0) {
                         if (cd > 0f) { ShowCooldown(); return true; }
                         bh.ProcessInventoryItem(inv, slot, isv, 1, 1, out _, out _);
+                        // 如果处理装填的 behavior 不是三个原版类之一, 说明是模组自定义武器, 禁用冷却
+                        if (bh is not (SubsystemMusketBlockBehavior or SubsystemCrossbowBlockBehavior or SubsystemBowBlockBehavior))
+                            MarkModWeapon();
                         return true;
                     }
                 }
@@ -199,9 +202,9 @@ namespace Game {
 
         ReloadPattern DetectPattern(int wc, Block block) {
             if (s_patternCache.TryGetValue(wc, out var c)) return c;
-            if (block is MusketBlock) { EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
-            if (block is CrossbowBlock) { EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
-            if (block is BowBlock) { EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+            if (block is MusketBlock) { if (block.GetType() != typeof(MusketBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+            if (block is CrossbowBlock) { if (block.GetType() != typeof(CrossbowBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+            if (block is BowBlock) { if (block.GetType() != typeof(BowBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
 
             var wb = m_subsystemBlockBehaviors.GetBlockBehaviors(wc);
             foreach (var bh in wb) {
@@ -217,8 +220,28 @@ namespace Game {
             return Cache(wc, ReloadPattern.None);
         }
 
+        // 在 OnLoadingFinished 时调用: 遍历所有方块检测模组武器, 有则预禁用冷却
+        // 比运行时检测更提前, 无需玩家先碰一下模组武器
+        public static void ScanForModWeapons() {
+            if (s_hasModWeapons) return;
+            foreach (Block block in BlocksManager.Blocks) {
+                if (block == null) continue;
+                Type t = block.GetType();
+                if (t == typeof(MusketBlock) || t == typeof(CrossbowBlock) || t == typeof(BowBlock)) continue;
+                if (block is MusketBlock || block is CrossbowBlock || block is BowBlock) {
+                    MarkModWeapon();
+                    return;
+                }
+            }
+        }
+
         static ReloadPattern Cache(int wc, ReloadPattern p) { s_patternCache[wc] = p; return p; }
 
+        // 标记检测到模组武器: 首次命中时写入标记并全局禁用装填冷却
+        // 触发点有三处:
+        //   1. OnLoadingFinished 全局方块扫描 — 启动时预判, 无需接触武器
+        //   2. DetectPattern 的 behavior/反射路径 — 按R时预判
+        //   3. TryProcessAmmo 装填成功时检测 behavior 非原版 — 最终兜底
         static void MarkModWeapon() {
             if (!s_hasModWeapons) { s_hasModWeapons = true; MusketCooldownTracker.CooldownEnabled = false; }
         }
