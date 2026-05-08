@@ -17,15 +17,16 @@
 ```
 VanillaEnhancement/
 ├── VanillaEnhancement.sln                  # 解决方案文件
+├── CHANGELOG.md                             # 更新日志
 └── VanillaEnhancement/
     ├── modinfo.json                         # 模组元数据
     ├── VanillaEnhancement.csproj            # .NET 10 项目文件
-    ├── VanillaEnhancementModLoader.cs       # 模组入口: 注册钩子 + Harmony 激活
-    ├── VanillaEnhancementModPatches.cs      # 全部 Harmony 补丁 (九大功能)
-    ├── TimeDisplayConfig.cs                 # 时间显示配置文件系统
+    ├── VanillaEnhancementModLoader.cs       # 模组入口: 注册钩子 + Harmony 激活 + 加载配置
+    ├── VanillaEnhancementModPatches.cs      # 全部 Harmony 补丁 (九大功能 + 冷却追踪)
+    ├── TimeDisplayConfig.cs                 # 时间显示 + 装填冷却 配置文件系统
     ├── ComponentTimeDisplay.cs              # 时间显示组件 (注入 GUI)
     ├── TimeDisplayWidget.cs                 # 昼夜/月相倒计时控件
-    ├── ComponentMusketAutoReload.cs         # 武器 R 键快速装填组件
+    ├── ComponentMusketAutoReload.cs         # 武器 R 键快速装填组件 (含模组武器兼容)
     ├── ComponentEating.cs                   # 右键长按进食状态机
     ├── InstantKillSpearBlock.cs             # 秒杀测试矛 (方块注册)
     └── Assets/
@@ -48,7 +49,7 @@ VanillaEnhancement/
 
 #### 配置文件
 
-首次运行后自动在游戏 `Mods/` 文件夹生成 `VanillaEnhancementConfig.json`，修改后重启游戏即可生效：
+首次运行后自动在游戏 `Mods/` 文件夹生成 `VanillaEnhancementConfig.json`，升级时自动补齐新增字段：
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -63,20 +64,48 @@ VanillaEnhancement/
 | `DawnCountdownDayColor` | `"180,200,255"` | 距离天亮倒计时颜色 |
 | `DawnCountdownNightColor` | `"80,160,255"` | 天亮前 15% 警告颜色 |
 | `FullMoonCountdownColor` | `"255,200,80"` | 月圆之夜结束倒计时颜色 |
-
-颜色格式为 `"R,G,B"`，如 `"255,255,255"` 表示白色。删除配置文件后重启游戏将自动重新生成默认配置。
+| `EnableReloadCooldown` | `true` | 启用装填冷却（检测到模组武器时自动禁用） |
 
 ### 2. R 键快速装填武器
 
-- **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs)
-- **支持武器**: 火枪、弩、弓
-- **火枪**: R 键一次性消耗火药+棉花+子弹（优先级: 大子弹 > 霰弹 > 小子弹）
-- **弩**: R 键分两步（拉弦 → 装螺栓），螺栓优先级: 钻石弩箭 > 铁弩箭 > 爆炸弩箭
-- **弓**: R 键装填一支箭（优先级: 钻石箭 > 铁箭 > 火箭 > 铜箭 > 石箭 > 木箭）
-- **冷却**: 发射后进入冷却（物品栏图标显示白色倒计时数字）
-- **提示**: 缺失材料提示 `没有可用的 XX`、已装填提示 `XX 已装填`、冷却中提示 `装填冷却中！`
+- **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs) + [VanillaEnhancementModPatches.cs](VanillaEnhancement/VanillaEnhancementModPatches.cs)
+- **支持武器**: 火枪、弩、弓（含原版子类 + 模组武器，通过三级检测自动适配）
+- **优先使用官方 Behavior API**: 装填逻辑委托给武器的 `SubsystemBlockBehavior`，通过 `GetProcessInventoryItemCapacity` + `ProcessInventoryItem` 保证与游戏原版行为一致，并自动兼容有自定义 behavior 的模组武器
+- **长按 R 键持续装填**: 首次 0.08s 延迟后每 0.04s 递进一步，60 发步枪约 2.5s 装满
+- **弹药搜索顺序**: 从武器槽位右侧开始环绕搜索，同行靠右、同列靠上的弹药优先
+- **创造模式优化**: 只搜索快捷栏（VisibleSlotsCount ≤ 10），避免扫描全物品目录
+- **状态提示**: 缺失材料 `没有可用的 XX` / 已装填 `XX 已装填` / 冷却中 `装填冷却中！`
+- **跨次按键状态记忆**: 满弹后反复按 R 始终正确提示"已装填"
 
-### 3. 装填冷却系统
+### 3. 武器兼容性系统
+
+#### 武器模式检测（三级，结果缓存）
+
+| 级别 | 检测方式 | 覆盖 |
+|------|---------|------|
+| 1 | `block is MusketBlock/CrossbowBlock/BowBlock` | 原版 + 所有继承子类 |
+| 2 | `behavior is SubsystemMusketBlockBehavior/...` | 任何注册了官方 behavior 的模组武器 |
+| 3 | 反射：`GetLoadState+SetLoadState` / `GetDraw+SetDraw+GetArrowType+SetArrowType` | 沿袭原版方法签名的自定义武器 |
+
+#### 弹药兼容（三级）
+
+| 级别 | 检测方式 | 覆盖 |
+|------|---------|------|
+| 1 | `behavior.GetProcessInventoryItemCapacity(inv, weaponSlot, ammo)` — 官方 API | 标准 behavior 实现 |
+| 2 | `ammoBlock is BulletBlock` / `ammoBlock is ArrowBlock` + `IsBoltType` | 原版继承链 |
+| 3 | 遍历弹药块所有 `Get*Type(int)` 静态方法 | 完全自定义的模组弹药 |
+
+#### 装填状态检测
+
+- 优先：`GetBulletType(data) != null` / `GetArrowType(data) != null`
+- 兜底：遍历武器类所有 `public static *Type(int)` 方法
+- 持久记录：首次确认装填状态后跨按键保持
+
+#### 模组武器自动禁用冷却
+
+检测到非原版武器（通过 behavior 或反射路径匹配）时，自动禁用装填冷却以保持公平。
+
+### 4. 装填冷却系统
 
 | 武器 | 基础冷却 | 等级缩放 | 最低冷却 |
 |------|---------|---------|---------|
@@ -84,10 +113,11 @@ VanillaEnhancement/
 | 弩 | 1.5s | 每级 -20% | 0.5s |
 | 弓 | 0.8s | 每级 -20% | 0.3s |
 
-- 冷却自动在发射后触发（Harmony 监听 `OnAim(Completed)`）
-- 每个物品栏槽位独立计时（以 `(IInventory, SlotIndex)` 为键）
+- 通过 `MusketCooldownTracker.CooldownEnabled` 全局开关控制
+- 配置项 `EnableReloadCooldown` 可手动关闭
+- 检测到模组武器时自动禁用，确保公平
 
-### 4. 右键长按吃食物
+### 5. 右键长按吃食物
 
 - **文件**: [ComponentEating.cs](VanillaEnhancement/ComponentEating.cs)
 - **触发**: 手持食物 → 长按右键
@@ -97,7 +127,7 @@ VanillaEnhancement/
 - **打断**: 松右键 / 换物品 / 切换槽位 → 自动取消
 - **兼容**: 原版拖拽衣服界面吃食物方式保留不变
 
-### 5. 右键自动穿衣
+### 6. 右键自动穿衣
 
 - **文件**: [VanillaEnhancementModPatches.cs](VanillaEnhancement/VanillaEnhancementModPatches.cs) `RightClickWearClothingPatch`
 - **触发**: 手持衣物（ClothingBlock）→ 点按右键
@@ -106,21 +136,11 @@ VanillaEnhancement/
 - **等级检查**: 生存模式下等级不足时提示所需等级
 - **兼容**: 与右键吃食物功能通过 `HarmonyPriority` 区分优先级，衣物优先检查，互不冲突
 
-### 6. 秒杀测试矛
+### 7. 秒杀测试矛
 
 - **文件**: [InstantKillSpearBlock.cs](VanillaEnhancement/InstantKillSpearBlock.cs)
 - **属性**: 继承 `SpearBlock`，使用铁矛纹理和模型，攻击力 9999，无投掷
 - **效果**: 左键击中生物时秒杀 + 显示该生物的有效血量上限
-
-### 7. 缺失材料提示
-
-- **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs) `ShowMissingMessage()`
-- 按 R 装填时逐项检查所需材料，首次缺失即闪烁提示 `没有可用的 XX`
-
-### 8. 已装填状态提示
-
-- **文件**: [ComponentMusketAutoReload.cs](VanillaEnhancement/ComponentMusketAutoReload.cs) `ShowLoadedMessage()`
-- 武器已装填时按 R 显示 `XX 已装填`，名称通过 `LanguageControl.Get()` 读取原版语言文件
 
 ## 架构设计
 
@@ -131,7 +151,7 @@ VanillaEnhancement/
 | 组件 | LoadOrder | 功能 |
 |------|-----------|------|
 | ComponentTimeDisplay | 2147483647 | 注入 TimeDisplayWidget 到 GUI |
-| ComponentMusketAutoReload | 2147483646 | 武器 R 键装填 + 冷却更新 |
+| ComponentMusketAutoReload | 2147483646 | 武器 R 键装填 + 长按持续装填 + 冷却检测 |
 | ComponentEating | 2147483645 | 右键长按进食状态机 |
 
 ### Harmony 补丁注入
@@ -141,7 +161,7 @@ VanillaEnhancement/
 | 补丁 | 目标方法 | 功能 |
 |------|---------|------|
 | InventorySlotCooldownOverlayPatch | InventorySlotWidget.ctor | 添加冷却数字 Label |
-| InventorySlotCooldownUpdatePatch | InventorySlotWidget.Update | 更新冷却数字显示 |
+| InventorySlotCooldownUpdatePatch | InventorySlotWidget.Update | 更新冷却数字显示（含模组武器） |
 | MusketFireDetectionPatch | SubsystemMusketBlockBehavior.OnAim | 火枪发射→记录冷却 |
 | CrossbowFireDetectionPatch | SubsystemCrossbowBlockBehavior.OnAim | 弩发射→记录冷却 |
 | BowFireDetectionPatch | SubsystemBowBlockBehavior.OnAim | 弓发射→记录冷却 |
@@ -151,11 +171,12 @@ VanillaEnhancement/
 
 ### 配置文件系统
 
-首次运行后自动在游戏 `Mods/` 文件夹生成 `VanillaEnhancementConfig.json`。
+首次运行后自动在游戏 `Mods/` 文件夹生成 `VanillaEnhancementConfig.json`，每次启动自动适配新版字段。
 
 - **文件**: [TimeDisplayConfig.cs](VanillaEnhancement/TimeDisplayConfig.cs)
 - **加载时机**: `OnLoadingFinished` 钩子中调用 `TimeDisplayConfig.Load()`
 - **容错**: 配置文件缺失或解析失败时自动生成默认配置，不影响游戏运行
+- **升级兼容**: 旧版配置文件加载后自动补齐新字段并写回
 - **格式**: JSON，颜色为 `"R,G,B"` 字符串，对齐方式支持字符串名（如 `"Near"`）或数字（0-3）
 
 ### 方块注册 (csv)

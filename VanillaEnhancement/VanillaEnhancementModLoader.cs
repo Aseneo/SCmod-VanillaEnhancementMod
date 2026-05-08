@@ -18,6 +18,7 @@ namespace Game {
         // 游戏所有资源加载完毕后触发
         public override void OnLoadingFinished(List<Action> actions) {
             TimeDisplayConfig.Load();
+            MusketCooldownTracker.CooldownEnabled = TimeDisplayConfig.EnableReloadCooldown;
             Log.Information("Vanilla Enhancement Mod: Game Loaded.");
         }
     }

@@ -1,4 +1,6 @@
-// 武器 R 键快速装填组件: 支持火枪/弩/弓的 R 键装填, 含冷却、装填检测、弹药优先级选择
+using System;
+using System.Collections.Generic;
+using System.Reflection;
 using Engine;
 using Engine.Input;
 using GameEntitySystem;
@@ -8,256 +10,254 @@ namespace Game {
     public class ComponentMusketAutoReload : Component, IUpdateable {
         public ComponentPlayer m_componentPlayer;
         public SubsystemTerrain m_subsystemTerrain;
-        public SubsystemTime m_subsystemTime;
-        // 各武器/弹药的 BlockIndex 缓存
-        public int m_musketBlockIndex;
-        public int m_gunpowderBlockIndex;
-        public int m_cottonWadBlockIndex;
-        public int m_bulletBlockIndex;
-        public int m_crossbowBlockIndex;
-        public int m_bowBlockIndex;
-        public int m_arrowBlockIndex;
-        public const string fName = "ComponentMusketAutoReload";
+        public SubsystemBlockBehaviors m_subsystemBlockBehaviors;
 
-        public UpdateOrder UpdateOrder => UpdateOrder.Default;
+        public enum ReloadPattern { None, Musket, Crossbow, Bow }
+
+        public static Dictionary<int, ReloadPattern> s_patternCache = new();
+        public static bool s_hasModWeapons;
+        public static Dictionary<int, MethodInfo> s_getLoadState = new();
+        public static Dictionary<int, MethodInfo> s_getBulletType = new();
+        public static Dictionary<int, MethodInfo> s_getDraw = new();
+        public static Dictionary<int, MethodInfo> s_getArrowType = new();
+        public static Dictionary<int, MethodInfo> s_setDraw = new();
+        // 兜底: 任意 Get*Type(int) 方法缓存(用于检测已装填)
+        public static Dictionary<int, MethodInfo> s_anyTypeGetter = new();
+        // 持久记录已确认装填的武器值: (wc << 16 | data) → true, 跨次按键保持
+        public static HashSet<int> s_loadedOnce = new();
+
+        // 长按持续装填
+        public float m_reloadTimer;
+        public int m_reloadWeaponSlot = -1;
+        public bool m_didProcessThisHold;
+        public const float FirstDelay = 0.08f;
+        public const float RepeatDelay = 0.04f;
+
+        public static BindingFlags s_sf = BindingFlags.Public | BindingFlags.Static;
 
         public override void Load(ValuesDictionary valuesDictionary, IdToEntityMap idToEntityMap) {
             m_componentPlayer = Entity.FindComponent<ComponentPlayer>(true);
             m_subsystemTerrain = Project.FindSubsystem<SubsystemTerrain>(true);
-            m_subsystemTime = Project.FindSubsystem<SubsystemTime>(true);
-            m_musketBlockIndex = BlocksManager.GetBlockIndex<MusketBlock>();
-            m_gunpowderBlockIndex = BlocksManager.GetBlockIndex<GunpowderBlock>();
-            m_cottonWadBlockIndex = BlocksManager.GetBlockIndex<CottonWadBlock>();
-            m_bulletBlockIndex = BlocksManager.GetBlockIndex<BulletBlock>();
-            m_crossbowBlockIndex = BlocksManager.GetBlockIndex<CrossbowBlock>();
-            m_bowBlockIndex = BlocksManager.GetBlockIndex<BowBlock>();
-            m_arrowBlockIndex = BlocksManager.GetBlockIndex<ArrowBlock>();
+            m_subsystemBlockBehaviors = Project.FindSubsystem<SubsystemBlockBehaviors>(true);
         }
 
         public void Update(float dt) {
-            // 只响应 R 键单次按下
-            if (m_componentPlayer == null || !Keyboard.IsKeyDownOnce(Key.R)) {
-                return;
-            }
-            ComponentMiner componentMiner = m_componentPlayer.ComponentMiner;
-            if (componentMiner == null) {
-                return;
-            }
-            IInventory inventory = componentMiner.Inventory;
-            if (inventory == null) {
-                return;
-            }
-            int activeSlotIndex = inventory.ActiveSlotIndex;
-            if (activeSlotIndex < 0) {
-                return;
-            }
-            int slotValue = inventory.GetSlotValue(activeSlotIndex);
-            int contents = Terrain.ExtractContents(slotValue);
-            int data = Terrain.ExtractData(slotValue);
-            // 查询当前槽位的冷却剩余时间
-            float remaining = MusketCooldownTracker.GetCooldownRemaining(inventory, activeSlotIndex);
+            if (m_componentPlayer == null) return;
+            var miner = m_componentPlayer.ComponentMiner;
+            if (miner == null) return;
+            var inv = miner.Inventory;
+            if (inv == null) return;
+            int slot = inv.ActiveSlotIndex;
+            if (slot < 0) return;
+            int sv = inv.GetSlotValue(slot);
+            int wc = Terrain.ExtractContents(sv);
+            if (wc == 0) return;
+            Block block = BlocksManager.Blocks[wc];
+            var wb = m_subsystemBlockBehaviors.GetBlockBehaviors(wc);
+            ReloadPattern p = DetectPattern(wc, block);
+            if (p == ReloadPattern.None) { m_reloadTimer = 0f; m_reloadWeaponSlot = -1; return; }
 
-            // --- 火枪装填逻辑 ---
-            if (contents == m_musketBlockIndex) {
-                MusketBlock.LoadState loadState = MusketBlock.GetLoadState(data);
-                // 已装弹完毕 → 显示当前弹种名称
-                if (loadState == MusketBlock.LoadState.Loaded) {
-                    BulletBlock.BulletType? bulletType = MusketBlock.GetBulletType(data);
-                    if (bulletType.HasValue) {
-                        ShowLoadedMessage(LanguageControl.Get("BulletBlock", (int)bulletType.Value));
+            bool keyDown = Keyboard.IsKeyDown(Key.R);
+            bool keyOnce = Keyboard.IsKeyDownOnce(Key.R);
+
+            if (!keyDown && !keyOnce) { m_reloadTimer = 0f; m_reloadWeaponSlot = -1; return; }
+
+            if (keyOnce || (keyDown && m_reloadWeaponSlot != slot)) {
+                m_reloadTimer = 0f;
+                m_reloadWeaponSlot = slot;
+                m_didProcessThisHold = false;
+                bool ok = ProcessSingleStep(inv, slot, wc, sv, block, wb, p);
+                if (ok) { m_didProcessThisHold = true; return; }
+                ShowFinalStatus(inv, slot, wc, sv, block, p);
+                return;
+            }
+            if (keyDown) {
+                m_reloadTimer += dt;
+                float threshold = m_reloadTimer < FirstDelay ? FirstDelay : RepeatDelay;
+                if (m_reloadTimer >= threshold) {
+                    m_reloadTimer -= threshold;
+                    bool ok = ProcessSingleStep(inv, slot, wc, sv, block, wb, p);
+                    if (ok) { m_didProcessThisHold = true; return; }
+                    ShowFinalStatus(inv, slot, wc, sv, block, p);
+                    m_reloadTimer = -10f;
+                }
+            }
+        }
+
+        // 执行一次装填步骤, 返回 true 表示成功递进了
+        bool ProcessSingleStep(IInventory inv, int slot, int wc, int sv, Block block, SubsystemBlockBehavior[] wb, ReloadPattern p) {
+            int data = Terrain.ExtractData(sv);
+            int oldKey = (wc << 16) | data;
+            float cd = MusketCooldownTracker.GetCooldownRemaining(inv, slot);
+            bool ok;
+            if (p == ReloadPattern.Crossbow) {
+                ok = TryProcessAmmo(inv, slot, wc, data, p, wb, cd);
+                if (!ok && !IsAlreadyLoaded(wc, data, block)) { TryCrankCrossbow(inv, slot, wc, data, block, cd); }
+            } else {
+                ok = TryProcessAmmo(inv, slot, wc, data, p, wb, cd);
+            }
+            if (ok) s_loadedOnce.Remove(oldKey);
+            return ok;
+        }
+
+        // 停止持续装填时显示最终状态
+        void ShowFinalStatus(IInventory inv, int slot, int wc, int sv, Block block, ReloadPattern p) {
+            int data = Terrain.ExtractData(sv);
+            bool loaded = m_didProcessThisHold || IsAlreadyLoaded(wc, data, block) || s_loadedOnce.Contains((wc << 16) | data);
+            if (loaded) {
+                s_loadedOnce.Add((wc << 16) | data);
+                ShowLoaded(block.GetDisplayName(m_subsystemTerrain, Terrain.MakeBlockValue(wc, 0, data)));
+            }
+            else if (p == ReloadPattern.Musket) {
+                ShowMissing(GuessNextMusketAmmo(wc, data, block));
+            }
+            else if (p == ReloadPattern.Crossbow) {
+                int draw = block is CrossbowBlock ? CrossbowBlock.GetDraw(data) : (int)s_getDraw[wc].Invoke(null, [data]);
+                ShowMissing("弩箭");
+            }
+            else if (p == ReloadPattern.Bow) {
+                ShowMissing("箭");
+            }
+        }
+
+        // ===== 核心: behavior 递进装填 =====
+
+        bool TryProcessAmmo(IInventory inv, int slot, int wc, int data, ReloadPattern p, SubsystemBlockBehavior[] wb, float cd) {
+            int sc = InvSearchCount(inv);
+            for (int offset = 1; offset < sc; offset++) {
+                int i = (slot + offset) % sc;
+                int isv = inv.GetSlotValue(i);
+                if (inv.GetSlotCount(i) <= 0) continue;
+                foreach (var bh in wb) {
+                    if (bh.GetProcessInventoryItemCapacity(inv, slot, isv) > 0) {
+                        if (cd > 0f) { ShowCooldown(); return true; }
+                        bh.ProcessInventoryItem(inv, slot, isv, 1, 1, out _, out _);
+                        return true;
                     }
-                    return;
                 }
-                // 冷却中
-                if (remaining > 0f) {
-                    ShowCooldownMessage();
-                    return;
-                }
-                // 一次性装填: 火药 + 棉花 + 子弹
-                TryReloadMusket(inventory, activeSlotIndex, data);
-            }
-            // --- 弩装填逻辑: 分两步(拉弦→装螺栓), 共享一个冷却窗口 ---
-            else if (contents == m_crossbowBlockIndex) {
-                ArrowBlock.ArrowType? boltType = CrossbowBlock.GetArrowType(data);
-                int draw = CrossbowBlock.GetDraw(data);
-                // 已拉弦 + 已装螺栓 → 显示当前螺栓名称
-                if (draw == 15 && boltType.HasValue) {
-                    ShowLoadedMessage(LanguageControl.Get("ArrowBlock", (int)boltType.Value));
-                    return;
-                }
-                if (remaining > 0f) {
-                    ShowCooldownMessage();
-                    return;
-                }
-                // 第一步: 拉弦(draw→15) 或 第二步: 装填螺栓
-                TryReloadCrossbow(inventory, activeSlotIndex, data);
-            }
-            // --- 弓装填逻辑 ---
-            else if (contents == m_bowBlockIndex) {
-                ArrowBlock.ArrowType? arrowType = BowBlock.GetArrowType(data);
-                // 已装箭 → 显示当前箭名
-                if (arrowType.HasValue) {
-                    ShowLoadedMessage(LanguageControl.Get("ArrowBlock", (int)arrowType.Value));
-                    return;
-                }
-                if (remaining > 0f) {
-                    ShowCooldownMessage();
-                    return;
-                }
-                TryReloadBow(inventory, activeSlotIndex, data);
-            }
-        }
-
-        // 显示冷却提示(闪烁消息)
-        public void ShowCooldownMessage() {
-            m_componentPlayer.ComponentGui.DisplaySmallMessage("装填冷却中！", Color.White, true, false);
-        }
-
-        // 显示缺失材料提示
-        public void ShowMissingMessage(string itemName) {
-            m_componentPlayer.ComponentGui.DisplaySmallMessage(string.Format("没有可用的 {0}", itemName), Color.White, true, false);
-        }
-
-        // 显示已装填提示
-        public void ShowLoadedMessage(string ammoName) {
-            m_componentPlayer.ComponentGui.DisplaySmallMessage(string.Format("{0} 已装填", ammoName), Color.White, true, false);
-        }
-
-        // 火枪装填: 消耗火药+棉花+子弹 → LoadState.Empty→Loaded
-        // 子弹优先级: MusketBall(大子弹) > Buckshot(霰弹) > BuckshotBall(小子弹)
-        public bool TryReloadMusket(IInventory inventory, int activeSlotIndex, int data) {
-            int gunpowderSlot = FindItemInInventory(inventory, m_gunpowderBlockIndex);
-            int cottonWadSlot = FindItemInInventory(inventory, m_cottonWadBlockIndex);
-            int bulletSlot = FindBestBulletSlot(inventory);
-            if (gunpowderSlot < 0) { ShowMissingMessage("火药"); return false; }
-            if (cottonWadSlot < 0) { ShowMissingMessage("棉花"); return false; }
-            if (bulletSlot < 0) { ShowMissingMessage("子弹"); return false; }
-            int bulletValue = inventory.GetSlotValue(bulletSlot);
-            BulletBlock.BulletType? bulletType = BulletBlock.GetBulletType(Terrain.ExtractData(bulletValue));
-            inventory.RemoveSlotItems(gunpowderSlot, 1);
-            inventory.RemoveSlotItems(cottonWadSlot, 1);
-            inventory.RemoveSlotItems(bulletSlot, 1);
-            int newData = MusketBlock.SetLoadState(data, MusketBlock.LoadState.Loaded);
-            newData = MusketBlock.SetBulletType(newData, bulletType);
-            inventory.RemoveSlotItems(activeSlotIndex, 1);
-            inventory.AddSlotItems(activeSlotIndex, Terrain.MakeBlockValue(m_musketBlockIndex, 0, newData), 1);
-            return true;
-        }
-
-        // 弩装填: 第一步 R=拉弦(draw→15), 第二步 R=装螺栓(draw=15且无螺栓时)
-        // 螺栓优先级: DiamondBolt(钻石弩箭) > IronBolt(铁弩箭) > ExplosiveBolt(爆炸弩箭)
-        public bool TryReloadCrossbow(IInventory inventory, int activeSlotIndex, int data) {
-            int draw = CrossbowBlock.GetDraw(data);
-            if (draw < 15) {
-                // 拉弦到满
-                int newData = CrossbowBlock.SetDraw(data, 15);
-                inventory.RemoveSlotItems(activeSlotIndex, 1);
-                inventory.AddSlotItems(activeSlotIndex, Terrain.MakeBlockValue(m_crossbowBlockIndex, 0, newData), 1);
-                return true;
-            }
-            if (!CrossbowBlock.GetArrowType(data).HasValue) {
-                // 装填螺栓
-                int boltSlot = FindBestBoltSlot(inventory);
-                if (boltSlot < 0) { ShowMissingMessage("弩箭"); return false; }
-                int boltValue = inventory.GetSlotValue(boltSlot);
-                ArrowBlock.ArrowType boltType = ArrowBlock.GetArrowType(Terrain.ExtractData(boltValue));
-                inventory.RemoveSlotItems(boltSlot, 1);
-                int newData = CrossbowBlock.SetArrowType(data, boltType);
-                inventory.RemoveSlotItems(activeSlotIndex, 1);
-                inventory.AddSlotItems(activeSlotIndex, Terrain.MakeBlockValue(m_crossbowBlockIndex, 0, newData), 1);
-                return true;
             }
             return false;
         }
 
-        // 弓装填: 消耗一支箭
-        // 箭优先级: DiamondArrow > IronArrow > FireArrow > CopperArrow > StoneArrow > WoodenArrow
-        public bool TryReloadBow(IInventory inventory, int activeSlotIndex, int data) {
-            int arrowSlot = FindBestArrowSlot(inventory);
-            if (arrowSlot < 0) { ShowMissingMessage("箭"); return false; }
-            int arrowValue = inventory.GetSlotValue(arrowSlot);
-            ArrowBlock.ArrowType arrowType = ArrowBlock.GetArrowType(Terrain.ExtractData(arrowValue));
-            inventory.RemoveSlotItems(arrowSlot, 1);
-            int newData = BowBlock.SetArrowType(data, arrowType);
-            inventory.RemoveSlotItems(activeSlotIndex, 1);
-            inventory.AddSlotItems(activeSlotIndex, Terrain.MakeBlockValue(m_bowBlockIndex, 0, newData), 1);
-            return true;
+        void TryCrankCrossbow(IInventory inv, int slot, int wc, int data, Block block, float cd) {
+            if (cd > 0f) { ShowCooldown(); return; }
+            int nd = 15;
+            if (block is CrossbowBlock)
+                ReplaceSlot(inv, slot, wc, CrossbowBlock.SetDraw(data, nd));
+            else
+                ReplaceSlot(inv, slot, wc, (int)s_setDraw[wc].Invoke(null, [data, nd]));
         }
 
-        // 在物品栏中查找指定 blockIndex 的物品(排除手持槽位)
-        public int FindItemInInventory(IInventory inventory, int blockIndex) {
-            for (int i = 0; i < inventory.VisibleSlotsCount; i++) {
-                if (i == inventory.ActiveSlotIndex) { continue; }
-                int slotValue = inventory.GetSlotValue(i);
-                if (Terrain.ExtractContents(slotValue) == blockIndex && inventory.GetSlotCount(i) > 0) {
-                    return i;
+        // ===== 装填状态判断 =====
+
+        // 弹药类型检测: GetBulletType/GetArrowType 非null → 已装填
+        // 兜底: 遍历块类所有 Get*Type(int) 方法, 任一个返回非null即视为已装填
+        bool IsAlreadyLoaded(int wc, int data, Block block) {
+            if (block is MusketBlock) return MusketBlock.GetBulletType(data).HasValue;
+            if (block is CrossbowBlock) return CrossbowBlock.GetArrowType(data).HasValue && CrossbowBlock.GetDraw(data) >= 15;
+            if (block is BowBlock) return BowBlock.GetArrowType(data).HasValue;
+
+            // 已缓存的读取方法
+            if (s_getBulletType.TryGetValue(wc, out var mb) && mb != null) return mb.Invoke(null, [data]) != null;
+            if (s_getArrowType.TryGetValue(wc, out var ma) && ma != null) {
+                object at = ma.Invoke(null, [data]);
+                if (at != null) return !s_getDraw.ContainsKey(wc) || (int)s_getDraw[wc].Invoke(null, [data]) >= 15;
+                return false;
+            }
+
+            // 兜底扫描
+            if (s_anyTypeGetter.TryGetValue(wc, out var mg) && mg != null) return mg.Invoke(null, [data]) != null;
+
+            Type t = block.GetType();
+            if (t == typeof(MusketBlock) || t == typeof(CrossbowBlock) || t == typeof(BowBlock)) return false;
+
+            foreach (MethodInfo m in t.GetMethods(s_sf)) {
+                if (!m.Name.EndsWith("Type")) continue;
+                ParameterInfo[] pr = m.GetParameters();
+                if (pr.Length == 1 && pr[0].ParameterType == typeof(int)) {
+                    s_anyTypeGetter[wc] = m;
+                    return m.Invoke(null, [data]) != null;
                 }
             }
-            return -1;
+            s_anyTypeGetter[wc] = null;
+            return false;
         }
 
-        // 查找最优子弹槽位: 大子弹 > 霰弹 > 小子弹
-        public int FindBestBulletSlot(IInventory inventory) {
-            int musketBallSlot = -1, buckshotSlot = -1, buckshotBallSlot = -1;
-            for (int i = 0; i < inventory.VisibleSlotsCount; i++) {
-                if (i == inventory.ActiveSlotIndex) { continue; }
-                int slotValue = inventory.GetSlotValue(i);
-                if (Terrain.ExtractContents(slotValue) != m_bulletBlockIndex || inventory.GetSlotCount(i) <= 0) { continue; }
-                BulletBlock.BulletType bulletType = BulletBlock.GetBulletType(Terrain.ExtractData(slotValue));
-                switch (bulletType) {
-                    case BulletBlock.BulletType.MusketBall: musketBallSlot = i; break;
-                    case BulletBlock.BulletType.Buckshot: buckshotSlot = i; break;
-                    case BulletBlock.BulletType.BuckshotBall: if (buckshotBallSlot < 0) { buckshotBallSlot = i; } break;
-                }
+        static string GuessNextMusketAmmo(int wc, int data, Block block) {
+            if (block is MusketBlock) {
+                return MusketBlock.GetLoadState(data) switch {
+                    MusketBlock.LoadState.Empty => "火药",
+                    MusketBlock.LoadState.Gunpowder => "棉花",
+                    _ => "子弹"
+                };
             }
-            if (musketBallSlot >= 0) { return musketBallSlot; }
-            if (buckshotSlot >= 0) { return buckshotSlot; }
-            return buckshotBallSlot;
+            if (s_getLoadState.TryGetValue(wc, out var m) && m != null) {
+                int ls = (int)m.Invoke(null, [data]);
+                return ls == 0 ? "火药" : ls == 1 ? "棉花" : "子弹";
+            }
+            return "弹药";
         }
 
-        // 查找最优弩箭槽位: 钻石弩箭 > 铁弩箭 > 爆炸弩箭
-        public int FindBestBoltSlot(IInventory inventory) {
-            int diamondBoltSlot = -1, ironBoltSlot = -1, explosiveBoltSlot = -1;
-            for (int i = 0; i < inventory.VisibleSlotsCount; i++) {
-                if (i == inventory.ActiveSlotIndex) { continue; }
-                int slotValue = inventory.GetSlotValue(i);
-                if (Terrain.ExtractContents(slotValue) != m_arrowBlockIndex || inventory.GetSlotCount(i) <= 0) { continue; }
-                ArrowBlock.ArrowType arrowType = ArrowBlock.GetArrowType(Terrain.ExtractData(slotValue));
-                switch (arrowType) {
-                    case ArrowBlock.ArrowType.DiamondBolt: diamondBoltSlot = i; break;
-                    case ArrowBlock.ArrowType.IronBolt: ironBoltSlot = i; break;
-                    case ArrowBlock.ArrowType.ExplosiveBolt: if (explosiveBoltSlot < 0) { explosiveBoltSlot = i; } break;
-                }
+        // ===== 模式检测 =====
+
+        ReloadPattern DetectPattern(int wc, Block block) {
+            if (s_patternCache.TryGetValue(wc, out var c)) return c;
+            if (block is MusketBlock) { EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+            if (block is CrossbowBlock) { EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+            if (block is BowBlock) { EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+
+            var wb = m_subsystemBlockBehaviors.GetBlockBehaviors(wc);
+            foreach (var bh in wb) {
+                if (bh is SubsystemMusketBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+                if (bh is SubsystemCrossbowBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+                if (bh is SubsystemBowBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
             }
-            if (diamondBoltSlot >= 0) { return diamondBoltSlot; }
-            if (ironBoltSlot >= 0) { return ironBoltSlot; }
-            return explosiveBoltSlot;
+
+            Type t = block.GetType();
+            if (t.GetMethod("GetLoadState", s_sf) != null && t.GetMethod("SetLoadState", s_sf) != null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+            if (t.GetMethod("GetDraw", s_sf) != null && t.GetMethod("SetDraw", s_sf) != null && t.GetMethod("GetArrowType", s_sf) != null && t.GetMethod("SetArrowType", s_sf) != null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+            if (t.GetMethod("GetArrowType", s_sf) != null && t.GetMethod("SetArrowType", s_sf) != null && t.GetMethod("GetDraw", s_sf) == null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+            return Cache(wc, ReloadPattern.None);
         }
 
-        // 查找最优箭矢槽位: DiamondArrow > IronArrow > FireArrow > CopperArrow > StoneArrow > WoodenArrow
-        public int FindBestArrowSlot(IInventory inventory) {
-            int diamondArrowSlot = -1, ironArrowSlot = -1, fireArrowSlot = -1;
-            int copperArrowSlot = -1, stoneArrowSlot = -1, woodenArrowSlot = -1;
-            for (int i = 0; i < inventory.VisibleSlotsCount; i++) {
-                if (i == inventory.ActiveSlotIndex) { continue; }
-                int slotValue = inventory.GetSlotValue(i);
-                if (Terrain.ExtractContents(slotValue) != m_arrowBlockIndex || inventory.GetSlotCount(i) <= 0) { continue; }
-                ArrowBlock.ArrowType arrowType = ArrowBlock.GetArrowType(Terrain.ExtractData(slotValue));
-                switch (arrowType) {
-                    case ArrowBlock.ArrowType.DiamondArrow: diamondArrowSlot = i; break;
-                    case ArrowBlock.ArrowType.IronArrow: ironArrowSlot = i; break;
-                    case ArrowBlock.ArrowType.FireArrow: fireArrowSlot = i; break;
-                    case ArrowBlock.ArrowType.CopperArrow: if (copperArrowSlot < 0) { copperArrowSlot = i; } break;
-                    case ArrowBlock.ArrowType.StoneArrow: if (stoneArrowSlot < 0) { stoneArrowSlot = i; } break;
-                    case ArrowBlock.ArrowType.WoodenArrow: if (woodenArrowSlot < 0) { woodenArrowSlot = i; } break;
-                }
+        static ReloadPattern Cache(int wc, ReloadPattern p) { s_patternCache[wc] = p; return p; }
+
+        static void MarkModWeapon() {
+            if (!s_hasModWeapons) { s_hasModWeapons = true; MusketCooldownTracker.CooldownEnabled = false; }
+        }
+
+        static void EnsureMethods(Block block, ReloadPattern p) {
+            Type t = block.GetType(); int wc = block.BlockIndex;
+            if (p == ReloadPattern.Musket && !s_getLoadState.ContainsKey(wc)) {
+                s_getLoadState[wc] = t.GetMethod("GetLoadState", s_sf);
+                s_getBulletType[wc] = t.GetMethod("GetBulletType", s_sf);
+            } else if (p == ReloadPattern.Crossbow && !s_getDraw.ContainsKey(wc)) {
+                s_getDraw[wc] = t.GetMethod("GetDraw", s_sf);
+                s_setDraw[wc] = t.GetMethod("SetDraw", s_sf);
+                s_getArrowType[wc] = t.GetMethod("GetArrowType", s_sf);
+            } else if (p == ReloadPattern.Bow && !s_getArrowType.ContainsKey(wc)) {
+                s_getArrowType[wc] = t.GetMethod("GetArrowType", s_sf);
             }
-            if (diamondArrowSlot >= 0) { return diamondArrowSlot; }
-            if (ironArrowSlot >= 0) { return ironArrowSlot; }
-            if (fireArrowSlot >= 0) { return fireArrowSlot; }
-            if (copperArrowSlot >= 0) { return copperArrowSlot; }
-            if (stoneArrowSlot >= 0) { return stoneArrowSlot; }
-            return woodenArrowSlot;
+        }
+
+        // ===== 提示 =====
+
+        void ShowCooldown() => m_componentPlayer.ComponentGui.DisplaySmallMessage("装填冷却中！", Color.White, true, false);
+        void ShowMissing(string s) => m_componentPlayer.ComponentGui.DisplaySmallMessage(string.Format("没有可用的 {0}", s), Color.White, true, false);
+        void ShowLoaded(string s) => m_componentPlayer.ComponentGui.DisplaySmallMessage(string.Format("{0} 已装填", s), Color.White, true, false);
+
+        // ===== 工具 =====
+
+        static void ReplaceSlot(IInventory inv, int slot, int contents, int data) {
+            inv.RemoveSlotItems(slot, 1);
+            int cc = Terrain.ExtractContents(inv.GetSlotValue(slot));
+            if (cc == 0) cc = contents;
+            inv.AddSlotItems(slot, Terrain.MakeBlockValue(cc, 0, data), 1);
+        }
+
+        static int InvSearchCount(IInventory inv) {
+            if (inv is ComponentCreativeInventory) return inv.VisibleSlotsCount;
+            return inv.SlotsCount;
         }
     }
 }

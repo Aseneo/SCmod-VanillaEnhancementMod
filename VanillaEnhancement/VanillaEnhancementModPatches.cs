@@ -28,8 +28,12 @@ namespace Game {
         public static Dictionary<SlotKey, double> FireTimes = new();
         public static Dictionary<SlotKey, float> FullCooldowns = new();
 
+        // 由配置文件 + 模组武器检测控制. 为false时RecordFire无操作, GetCooldownRemaining永远返回0
+        public static bool CooldownEnabled = true;
+
         // 记录发射时间, 冷却由调用方计算
         public static void RecordFire(IInventory inventory, int slotIndex, float cooldown) {
+            if (!CooldownEnabled) return;
             SlotKey key = new SlotKey(inventory, slotIndex);
             FireTimes[key] = Time.FrameStartTime;
             FullCooldowns[key] = cooldown;
@@ -37,6 +41,7 @@ namespace Game {
 
         // 查询剩余冷却秒数, 已结束时返回 0
         public static float GetCooldownRemaining(IInventory inventory, int slotIndex) {
+            if (!CooldownEnabled) return 0f;
             SlotKey key = new SlotKey(inventory, slotIndex);
             if (FireTimes.TryGetValue(key, out double fireTime)) {
                 float full = GetFullCooldown(inventory, slotIndex);
@@ -53,11 +58,13 @@ namespace Game {
             return 2.5f;
         }
 
-        // 判断物品是否为需要装填的武器
         public static bool IsReloadableWeapon(int contents) {
-            return contents == BlocksManager.GetBlockIndex<MusketBlock>()
-                || contents == BlocksManager.GetBlockIndex<CrossbowBlock>()
-                || contents == BlocksManager.GetBlockIndex<BowBlock>();
+            if (contents == 0 || contents >= BlocksManager.Blocks.Length) { return false; }
+            if (ComponentMusketAutoReload.s_patternCache.TryGetValue(contents, out ComponentMusketAutoReload.ReloadPattern pattern)) {
+                return pattern != ComponentMusketAutoReload.ReloadPattern.None;
+            }
+            Block block = BlocksManager.Blocks[contents];
+            return block is MusketBlock || block is CrossbowBlock || block is BowBlock;
         }
     }
 
@@ -93,14 +100,15 @@ namespace Game {
                 return;
             }
             int data = Terrain.ExtractData(slotValue);
+            Block block = BlocksManager.Blocks[contents];
             bool needsReload = false;
-            if (contents == BlocksManager.GetBlockIndex<MusketBlock>()) {
+            if (block is MusketBlock) {
                 needsReload = MusketBlock.GetLoadState(data) == MusketBlock.LoadState.Empty;
             }
-            else if (contents == BlocksManager.GetBlockIndex<CrossbowBlock>()) {
+            else if (block is CrossbowBlock) {
                 needsReload = CrossbowBlock.GetDraw(data) < 15 || !CrossbowBlock.GetArrowType(data).HasValue;
             }
-            else if (contents == BlocksManager.GetBlockIndex<BowBlock>()) {
+            else if (block is BowBlock) {
                 needsReload = !BowBlock.GetArrowType(data).HasValue;
             }
             if (!needsReload) {
@@ -213,7 +221,9 @@ namespace Game {
             int slotIndex = inventory.ActiveSlotIndex;
             if (slotIndex < 0) { return true; }
             int slotValue = inventory.GetSlotValue(slotIndex);
-            if (Terrain.ExtractContents(slotValue) != BlocksManager.GetBlockIndex<BowBlock>()) { return true; }
+            int contents = Terrain.ExtractContents(slotValue);
+            if (contents == 0 || contents >= BlocksManager.Blocks.Length) { return true; }
+            if (!(BlocksManager.Blocks[contents] is BowBlock)) { return true; }
             int data = Terrain.ExtractData(slotValue);
             if (!BowBlock.GetArrowType(data).HasValue) { return true; }
             ComponentPlayer player = componentMiner.Entity.FindComponent<ComponentPlayer>();
