@@ -41,6 +41,7 @@
         <Compile Include="ComponentTimeDisplay.cs"/>
         <Compile Include="ComponentMusketAutoReload.cs"/>
         <Compile Include="ComponentEating.cs"/>
+        <Compile Include="VanillaEnhancementConfigScreen.cs"/>
         <Compile Include="InstantKillSpearBlock.cs"/>
     </ItemGroup>
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
