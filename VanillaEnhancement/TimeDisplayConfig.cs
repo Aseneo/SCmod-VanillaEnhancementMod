@@ -1,112 +1,42 @@
-using System;
-using System.Text.Json;
 using Engine;
 
 namespace Game {
-    public class TimeDisplayConfigData {
-        public string HorizontalAlignment { get; set; } = "Near";
-        public string VerticalAlignment { get; set; } = "Far";
-        public float MarginLeft { get; set; } = 10f;
-        public float MarginBottom { get; set; } = 10f;
-        public float FontScale { get; set; } = 1.1f;
-        public bool DropShadow { get; set; } = true;
-        public string DawnSegmentColor { get; set; } = "255,200,128";
-        public string DaySegmentColor { get; set; } = "255,255,255";
-        public string DuskSegmentColor { get; set; } = "255,140,60";
-        public string NightSegmentColor { get; set; } = "140,180,255";
-        public string FullMoonNightColor { get; set; } = "255,210,80";
-        public bool EnableReloadCooldown { get; set; } = true;
-    }
-
     public static class TimeDisplayConfig {
+        /// <summary>时间控件水平对齐方式: Near=左上, Center=居中, Far=右下, Stretch=拉伸铺满</summary>
         public static WidgetAlignment HorizontalAlignment = WidgetAlignment.Near;
+        /// <summary>时间控件垂直对齐方式: Near=左上, Center=居中, Far=右下, Stretch=拉伸铺满</summary>
         public static WidgetAlignment VerticalAlignment = WidgetAlignment.Far;
         public static float MarginLeft = 10f;
         public static float MarginBottom = 10f;
         public static float FontScale = 1.1f;
+        /// <summary>时间显示文字是否带阴影</summary>
         public static bool DropShadow = true;
+        /// <summary>黎明时段显示颜色 (DawnStart → DayStart)</summary>
         public static Color DawnSegmentColor = new Color(255, 200, 128);
+        /// <summary>白昼时段显示颜色 (DayStart → DuskStart)</summary>
         public static Color DaySegmentColor = Color.White;
+        /// <summary>黄昏时段显示颜色 (DuskStart → NightStart)</summary>
         public static Color DuskSegmentColor = new Color(255, 140, 60);
+        /// <summary>夜晚时段显示颜色 (NightStart → DawnStart, 非月圆)</summary>
         public static Color NightSegmentColor = new Color(140, 180, 255);
+        /// <summary>月圆之夜时段显示颜色 (MoonPhase 0 或 4)</summary>
         public static Color FullMoonNightColor = new Color(255, 210, 80);
+        /// <summary>武器装填冷却开关; 检测到模组武器时可能被自动禁用并锁定</summary>
         public static bool EnableReloadCooldown = true;
-
-        public static string ConfigPath => Storage.CombinePaths(ModsManager.ModsPath, "VanillaEnhancementConfig.json");
-
-        public static void Load() {
-            TimeDisplayConfigData data = new();
-            if (Storage.FileExists(ConfigPath)) {
-                try {
-                    string json = Storage.ReadAllText(ConfigPath);
-                    data = JsonSerializer.Deserialize<TimeDisplayConfigData>(json) ?? new();
-                }
-                catch (Exception e) {
-                    Log.Warning($"VanillaEnhancement: Failed to load config, using defaults. {e.Message}");
-                }
-            }
-            ApplyData(data);
-            Save(data);
-        }
-
-        static void Save(TimeDisplayConfigData data) {
-            try {
-                string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-                Storage.WriteAllText(ConfigPath, json);
-            }
-            catch (Exception e) {
-                Log.Warning($"VanillaEnhancement: Failed to save config. {e.Message}");
-            }
-        }
-
-        public static void ApplyData(TimeDisplayConfigData data) {
-            HorizontalAlignment = ParseAlignment(data.HorizontalAlignment, WidgetAlignment.Near);
-            VerticalAlignment = ParseAlignment(data.VerticalAlignment, WidgetAlignment.Far);
-            MarginLeft = data.MarginLeft;
-            MarginBottom = data.MarginBottom;
-            FontScale = data.FontScale;
-            DropShadow = data.DropShadow;
-            DawnSegmentColor = ParseColor(data.DawnSegmentColor, new Color(255, 200, 128));
-            DaySegmentColor = ParseColor(data.DaySegmentColor, Color.White);
-            DuskSegmentColor = ParseColor(data.DuskSegmentColor, new Color(255, 140, 60));
-            NightSegmentColor = ParseColor(data.NightSegmentColor, new Color(140, 180, 255));
-            FullMoonNightColor = ParseColor(data.FullMoonNightColor, new Color(255, 210, 80));
-            EnableReloadCooldown = data.EnableReloadCooldown;
-        }
-
-        public static WidgetAlignment ParseAlignment(string value, WidgetAlignment fallback) {
-            if (string.IsNullOrEmpty(value)) { return fallback; }
-            if (int.TryParse(value, out int intVal)) {
-                return intVal switch {
-                    0 => WidgetAlignment.Near,
-                    1 => WidgetAlignment.Center,
-                    2 => WidgetAlignment.Far,
-                    3 => WidgetAlignment.Stretch,
-                    _ => fallback
-                };
-            }
-            return value.ToLowerInvariant() switch {
-                "near" => WidgetAlignment.Near,
-                "center" => WidgetAlignment.Center,
-                "far" => WidgetAlignment.Far,
-                "stretch" => WidgetAlignment.Stretch,
-                _ => fallback
-            };
-        }
-
-        public static Color ParseColor(string value, Color fallback) {
-            if (string.IsNullOrEmpty(value)) { return fallback; }
-            string[] parts = value.Split(',');
-            if (parts.Length < 3) { return fallback; }
-            try {
-                int r = int.Parse(parts[0].Trim());
-                int g = int.Parse(parts[1].Trim());
-                int b = int.Parse(parts[2].Trim());
-                return new Color(r, g, b);
-            }
-            catch {
-                return fallback;
-            }
-        }
+        /// <summary>昼夜时间显示功能总开关; 关闭后屏幕上不再显示时间控件</summary>
+        public static bool EnableTimeDisplay = true;
+        /// <summary>R键长按连续装填开关; 关闭后单按R仍执行一次, 但长按不再自动循环装填</summary>
+        public static bool EnableLongPressReload = true;
+        /// <summary>右键自动穿衣功能开关</summary>
+        public static bool EnableClothingWear = true;
+        /// <summary>右键长按进食功能开关</summary>
+        public static bool EnableEating = true;
+        /// <summary>
+        /// 模组武器兼容模式开关: 开启后三级检测(类型继承/behavior绑定/反射)激活,
+        /// 检测到模组武器时自动禁用冷却; 关闭后R键仅对精确类型匹配的原版武器有效
+        /// </summary>
+        public static bool EnableModWeaponCompat = true;
+        /// <summary>是否已检测到模组武器(由 MarkModWeapon 在运行时设置), 用于配置界面锁定冷却开关</summary>
+        public static bool ModWeaponsDetected = false;
     }
 }
