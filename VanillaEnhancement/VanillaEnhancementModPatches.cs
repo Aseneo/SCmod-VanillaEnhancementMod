@@ -288,6 +288,7 @@ namespace Game {
     [HarmonyPriority(Priority.HigherThanNormal)]
     static class RightClickWearClothingPatch {
         static bool Prefix(ComponentMiner __instance, Ray3 ray, ref bool __result) {
+            if (!TimeDisplayConfig.EnableClothingWear) return true;
             if (__instance.Inventory == null) { return true; }
             int activeSlotIndex = __instance.Inventory.ActiveSlotIndex;
             if (activeSlotIndex < 0) { return true; }
@@ -325,6 +326,7 @@ namespace Game {
     [HarmonyPatch(typeof(ComponentMiner), nameof(ComponentMiner.Use))]
     static class RightClickEatPatch {
         static bool Prefix(ComponentMiner __instance, Ray3 ray, ref bool __result) {
+            if (!TimeDisplayConfig.EnableEating) return true;
             if (__instance.Inventory == null) { return true; }
             int activeSlotIndex = __instance.Inventory.ActiveSlotIndex;
             if (activeSlotIndex < 0) { return true; }
@@ -343,4 +345,18 @@ namespace Game {
             return false;
         }
     }
+
+    // 主菜单右下角配置按钮: 轮询 IsClicked → 弹出 Dialog
+    [HarmonyPatch(typeof(MainMenuScreen), nameof(MainMenuScreen.Update))]
+    static class MainMenuConfigButtonPatch {
+        static void Postfix(MainMenuScreen __instance) {
+            var rightBar = __instance.Children.Find<StackPanelWidget>("RightBottomBar", false);
+            if (rightBar == null) return;
+            var btn = rightBar.Children.Find<BevelledButtonWidget>("VanillaEnhancementConfigButton", false);
+            if (btn != null && btn.IsClicked) {
+                ScreensManager.SwitchScreen("VanillaEnhancementConfig");
+            }
+        }
+    }
 }
+

@@ -71,7 +71,7 @@ namespace Game {
                 ShowFinalStatus(inv, slot, wc, sv, block, p);
                 return;
             }
-            if (keyDown) {
+            if (keyDown && TimeDisplayConfig.EnableLongPressReload) {
                 m_reloadTimer += dt;
                 float threshold = m_reloadTimer < FirstDelay ? FirstDelay : RepeatDelay;
                 if (m_reloadTimer >= threshold) {
@@ -202,21 +202,31 @@ namespace Game {
 
         ReloadPattern DetectPattern(int wc, Block block) {
             if (s_patternCache.TryGetValue(wc, out var c)) return c;
-            if (block is MusketBlock) { if (block.GetType() != typeof(MusketBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
-            if (block is CrossbowBlock) { if (block.GetType() != typeof(CrossbowBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
-            if (block is BowBlock) { if (block.GetType() != typeof(BowBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
 
-            var wb = m_subsystemBlockBehaviors.GetBlockBehaviors(wc);
-            foreach (var bh in wb) {
-                if (bh is SubsystemMusketBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
-                if (bh is SubsystemCrossbowBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
-                if (bh is SubsystemBowBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+            if (TimeDisplayConfig.EnableModWeaponCompat) {
+                // 兼容模式: 子类 + behavior 绑定 + 反射方法签名 三级检测
+                if (block is MusketBlock) { if (block.GetType() != typeof(MusketBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+                if (block is CrossbowBlock) { if (block.GetType() != typeof(CrossbowBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+                if (block is BowBlock) { if (block.GetType() != typeof(BowBlock)) MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+
+                var wb = m_subsystemBlockBehaviors.GetBlockBehaviors(wc);
+                foreach (var bh in wb) {
+                    if (bh is SubsystemMusketBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+                    if (bh is SubsystemCrossbowBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+                    if (bh is SubsystemBowBlockBehavior) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+                }
+
+                Type t = block.GetType();
+                if (t.GetMethod("GetLoadState", s_sf) != null && t.GetMethod("SetLoadState", s_sf) != null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+                if (t.GetMethod("GetDraw", s_sf) != null && t.GetMethod("SetDraw", s_sf) != null && t.GetMethod("GetArrowType", s_sf) != null && t.GetMethod("SetArrowType", s_sf) != null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+                if (t.GetMethod("GetArrowType", s_sf) != null && t.GetMethod("SetArrowType", s_sf) != null && t.GetMethod("GetDraw", s_sf) == null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
             }
-
-            Type t = block.GetType();
-            if (t.GetMethod("GetLoadState", s_sf) != null && t.GetMethod("SetLoadState", s_sf) != null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
-            if (t.GetMethod("GetDraw", s_sf) != null && t.GetMethod("SetDraw", s_sf) != null && t.GetMethod("GetArrowType", s_sf) != null && t.GetMethod("SetArrowType", s_sf) != null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
-            if (t.GetMethod("GetArrowType", s_sf) != null && t.GetMethod("SetArrowType", s_sf) != null && t.GetMethod("GetDraw", s_sf) == null) { MarkModWeapon(); EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+            else {
+                // 纯原版模式: 仅精确匹配三个原版类型
+                if (block.GetType() == typeof(MusketBlock)) { EnsureMethods(block, ReloadPattern.Musket); return Cache(wc, ReloadPattern.Musket); }
+                if (block.GetType() == typeof(CrossbowBlock)) { EnsureMethods(block, ReloadPattern.Crossbow); return Cache(wc, ReloadPattern.Crossbow); }
+                if (block.GetType() == typeof(BowBlock)) { EnsureMethods(block, ReloadPattern.Bow); return Cache(wc, ReloadPattern.Bow); }
+            }
             return Cache(wc, ReloadPattern.None);
         }
 
@@ -243,7 +253,13 @@ namespace Game {
         //   2. DetectPattern 的 behavior/反射路径 — 按R时预判
         //   3. TryProcessAmmo 装填成功时检测 behavior 非原版 — 最终兜底
         static void MarkModWeapon() {
-            if (!s_hasModWeapons) { s_hasModWeapons = true; MusketCooldownTracker.CooldownEnabled = false; }
+            if (!TimeDisplayConfig.EnableModWeaponCompat) return;
+            if (!s_hasModWeapons) {
+                s_hasModWeapons = true;
+                TimeDisplayConfig.ModWeaponsDetected = true;
+                MusketCooldownTracker.CooldownEnabled = false;
+                TimeDisplayConfig.EnableReloadCooldown = false;
+            }
         }
 
         static void EnsureMethods(Block block, ReloadPattern p) {

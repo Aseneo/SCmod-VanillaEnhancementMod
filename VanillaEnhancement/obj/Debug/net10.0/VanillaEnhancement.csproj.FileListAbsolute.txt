@@ -14,3 +14,4 @@ f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug
 f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.pdb
 f:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\ref\VanillaEnhancement.dll
 F:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\obj\Debug\net10.0\VanillaEnhancement.sourcelink.json
+F:\SurvivalCraft\scapi\1.9.0.2.7\VanillaEnhancement\VanillaEnhancement\bin\Debug\net10.0\Assets\Screens\VanillaEnhancementConfigScreen.xml

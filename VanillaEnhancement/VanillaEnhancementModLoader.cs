@@ -1,26 +1,92 @@
-// 模组加载器入口: 继承 ModLoader, 在模组加载时注册钩子和 Harmony 补丁
 using System;
 using System.Collections.Generic;
+using System.Xml.Linq;
 using Engine;
 using HarmonyLib;
 
 namespace Game {
     public class VanillaEnhancementModLoader : ModLoader {
-        // __ModInitialize() 在模组实例化时被调用, 是最早的执行入口
         public override void __ModInitialize() {
-            // 注册游戏加载完成钩子
             ModsManager.RegisterHook("OnLoadingFinished", this);
-            // 通过 HarmonyX 注入所有标记了 [HarmonyPatch] 的补丁类
+            ModsManager.RegisterHook("OnMainMenuScreenCreated", this);
             Harmony harmony = new Harmony("com.vanillaenhancement.test");
             harmony.PatchAll();
         }
 
-        // 游戏所有资源加载完毕后触发
         public override void OnLoadingFinished(List<Action> actions) {
-            TimeDisplayConfig.Load();
-            MusketCooldownTracker.CooldownEnabled = TimeDisplayConfig.EnableReloadCooldown;
-            if (MusketCooldownTracker.CooldownEnabled) ComponentMusketAutoReload.ScanForModWeapons();
+            if (TimeDisplayConfig.EnableModWeaponCompat && MusketCooldownTracker.CooldownEnabled)
+                ComponentMusketAutoReload.ScanForModWeapons();
+            ScreensManager.AddScreen("VanillaEnhancementConfig", new VanillaEnhancementConfigScreen());
             Log.Information("Vanilla Enhancement Mod: Game Loaded.");
+        }
+
+        public override void OnMainMenuScreenCreated(MainMenuScreen mainMenuScreen,
+            StackPanelWidget leftBottomBar, StackPanelWidget rightBottomBar) {
+            rightBottomBar.Children.Add(new BevelledButtonWidget {
+                Name = "VanillaEnhancementConfigButton",
+                Text = LanguageControl.Get("VanillaEnhancementConfig", 29),
+                Size = new Vector2(48, 48),
+                FontScale = 1.2f
+            });
+        }
+
+        public override void SaveSettings(XElement xElement) {
+            xElement.SetAttributeValue("HorizontalAlignment", TimeDisplayConfig.HorizontalAlignment.ToString());
+            xElement.SetAttributeValue("VerticalAlignment", TimeDisplayConfig.VerticalAlignment.ToString());
+            xElement.SetAttributeValue("DropShadow", TimeDisplayConfig.DropShadow.ToString());
+            xElement.SetAttributeValue("DawnSegmentColor", FormatColor(TimeDisplayConfig.DawnSegmentColor));
+            xElement.SetAttributeValue("DaySegmentColor", FormatColor(TimeDisplayConfig.DaySegmentColor));
+            xElement.SetAttributeValue("DuskSegmentColor", FormatColor(TimeDisplayConfig.DuskSegmentColor));
+            xElement.SetAttributeValue("NightSegmentColor", FormatColor(TimeDisplayConfig.NightSegmentColor));
+            xElement.SetAttributeValue("FullMoonNightColor", FormatColor(TimeDisplayConfig.FullMoonNightColor));
+            xElement.SetAttributeValue("EnableReloadCooldown", TimeDisplayConfig.EnableReloadCooldown.ToString());
+            xElement.SetAttributeValue("EnableTimeDisplay", TimeDisplayConfig.EnableTimeDisplay.ToString());
+            xElement.SetAttributeValue("EnableLongPressReload", TimeDisplayConfig.EnableLongPressReload.ToString());
+            xElement.SetAttributeValue("EnableClothingWear", TimeDisplayConfig.EnableClothingWear.ToString());
+            xElement.SetAttributeValue("EnableEating", TimeDisplayConfig.EnableEating.ToString());
+            xElement.SetAttributeValue("EnableModWeaponCompat", TimeDisplayConfig.EnableModWeaponCompat.ToString());
+        }
+
+        public override void LoadSettings(XElement xElement) {
+            var h = xElement.Attribute("HorizontalAlignment")?.Value;
+            if (h != null) TimeDisplayConfig.HorizontalAlignment = Enum.TryParse(h, out WidgetAlignment wh) ? wh : WidgetAlignment.Near;
+            var v = xElement.Attribute("VerticalAlignment")?.Value;
+            if (v != null) TimeDisplayConfig.VerticalAlignment = Enum.TryParse(v, out WidgetAlignment wv) ? wv : WidgetAlignment.Far;
+            var ds = xElement.Attribute("DropShadow")?.Value;
+            if (ds != null) TimeDisplayConfig.DropShadow = bool.TryParse(ds, out bool b) ? b : true;
+            TimeDisplayConfig.DawnSegmentColor = ParseColorAttr(xElement, "DawnSegmentColor", TimeDisplayConfig.DawnSegmentColor);
+            TimeDisplayConfig.DaySegmentColor = ParseColorAttr(xElement, "DaySegmentColor", TimeDisplayConfig.DaySegmentColor);
+            TimeDisplayConfig.DuskSegmentColor = ParseColorAttr(xElement, "DuskSegmentColor", TimeDisplayConfig.DuskSegmentColor);
+            TimeDisplayConfig.NightSegmentColor = ParseColorAttr(xElement, "NightSegmentColor", TimeDisplayConfig.NightSegmentColor);
+            TimeDisplayConfig.FullMoonNightColor = ParseColorAttr(xElement, "FullMoonNightColor", TimeDisplayConfig.FullMoonNightColor);
+            var ec = xElement.Attribute("EnableReloadCooldown")?.Value;
+            if (ec != null) TimeDisplayConfig.EnableReloadCooldown = bool.TryParse(ec, out bool bc) ? bc : true;
+            MusketCooldownTracker.CooldownEnabled = TimeDisplayConfig.EnableReloadCooldown;
+            TimeDisplayConfig.EnableTimeDisplay = ParseBoolAttr(xElement, "EnableTimeDisplay", true);
+            var longReload = xElement.Attribute("EnableLongPressReload");
+            if (longReload != null)
+                TimeDisplayConfig.EnableLongPressReload = bool.TryParse(longReload.Value, out var lr) ? lr : true;
+            else
+                TimeDisplayConfig.EnableLongPressReload = ParseBoolAttr(xElement, "EnableAutoReload", true);
+            TimeDisplayConfig.EnableClothingWear = ParseBoolAttr(xElement, "EnableClothingWear", true);
+            TimeDisplayConfig.EnableEating = ParseBoolAttr(xElement, "EnableEating", true);
+            TimeDisplayConfig.EnableModWeaponCompat = ParseBoolAttr(xElement, "EnableModWeaponCompat", true);
+        }
+
+        static bool ParseBoolAttr(XElement el, string name, bool fallback) {
+            var val = el.Attribute(name)?.Value;
+            return val != null ? bool.TryParse(val, out bool b) ? b : fallback : fallback;
+        }
+
+        static string FormatColor(Color c) => $"{c.R},{c.G},{c.B}";
+        static Color ParseColorAttr(XElement el, string name, Color fallback) {
+            var val = el.Attribute(name)?.Value;
+            if (string.IsNullOrEmpty(val)) return fallback;
+            var parts = val.Split(',');
+            if (parts.Length < 3) return fallback;
+            if (int.TryParse(parts[0], out int r) && int.TryParse(parts[1], out int g) && int.TryParse(parts[2], out int b))
+                return new Color(r, g, b);
+            return fallback;
         }
     }
 }

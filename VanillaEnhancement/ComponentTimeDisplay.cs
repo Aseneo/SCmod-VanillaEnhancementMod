@@ -15,7 +15,7 @@ namespace Game {
         }
 
         public void Update(float dt) {
-            // 仅在首次 Update 时插入控件, 确保 GuiWidget 已就绪
+            if (!TimeDisplayConfig.EnableTimeDisplay) return;
             if (!m_widgetInserted && m_componentPlayer != null && m_componentPlayer.GuiWidget != null) {
                 m_componentPlayer.GuiWidget.AddChildren(new TimeDisplayWidget());
                 m_widgetInserted = true;
