@@ -5,6 +5,10 @@ using Engine;
 using HarmonyLib;
 
 namespace Game {
+    /// <summary>
+    /// VanillaEnhancement 模组加载器: 负责注册事件钩子、注入 Harmony 补丁、创建配置界面入口按钮、
+    /// 以及配置的持久化读写
+    /// </summary>
     public class VanillaEnhancementModLoader : ModLoader {
         public override void __ModInitialize() {
             ModsManager.RegisterHook("OnLoadingFinished", this);
@@ -30,6 +34,7 @@ namespace Game {
             });
         }
 
+        /// <summary>将 TimeDisplayConfig 中的所有配置项序列化到 XML 属性</summary>
         public override void SaveSettings(XElement xElement) {
             xElement.SetAttributeValue("HorizontalAlignment", TimeDisplayConfig.HorizontalAlignment.ToString());
             xElement.SetAttributeValue("VerticalAlignment", TimeDisplayConfig.VerticalAlignment.ToString());
@@ -47,6 +52,7 @@ namespace Game {
             xElement.SetAttributeValue("EnableModWeaponCompat", TimeDisplayConfig.EnableModWeaponCompat.ToString());
         }
 
+        /// <summary>从 XML 属性反序列化所有配置项到 TimeDisplayConfig, 兼容旧版 EnableAutoReload 键名</summary>
         public override void LoadSettings(XElement xElement) {
             var h = xElement.Attribute("HorizontalAlignment")?.Value;
             if (h != null) TimeDisplayConfig.HorizontalAlignment = Enum.TryParse(h, out WidgetAlignment wh) ? wh : WidgetAlignment.Near;
@@ -73,12 +79,15 @@ namespace Game {
             TimeDisplayConfig.EnableModWeaponCompat = ParseBoolAttr(xElement, "EnableModWeaponCompat", true);
         }
 
+        /// <summary>安全解析布尔属性, 缺失或格式错误时返回默认值</summary>
         static bool ParseBoolAttr(XElement el, string name, bool fallback) {
             var val = el.Attribute(name)?.Value;
             return val != null ? bool.TryParse(val, out bool b) ? b : fallback : fallback;
         }
 
+        /// <summary>将颜色序列化为 "R,G,B" 字符串</summary>
         static string FormatColor(Color c) => $"{c.R},{c.G},{c.B}";
+        /// <summary>从 "R,G,B" 字符串反序列化颜色, 格式错误时返回默认值</summary>
         static Color ParseColorAttr(XElement el, string name, Color fallback) {
             var val = el.Attribute(name)?.Value;
             if (string.IsNullOrEmpty(val)) return fallback;

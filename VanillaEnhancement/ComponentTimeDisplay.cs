@@ -6,6 +6,7 @@ using TemplatesDatabase;
 namespace Game {
     public class ComponentTimeDisplay : Component, IUpdateable {
         public ComponentPlayer m_componentPlayer;
+        /// <summary>是否已将 TimeDisplayWidget 注入到玩家 GUI</summary>
         public bool m_widgetInserted;
 
         public UpdateOrder UpdateOrder => UpdateOrder.Default;
@@ -14,6 +15,7 @@ namespace Game {
             m_componentPlayer = Entity.FindComponent<ComponentPlayer>(true);
         }
 
+        /// <summary>在功能开关开启且玩家 GUI 就绪时, 将 TimeDisplayWidget 添加到 GUI 中</summary>
         public void Update(float dt) {
             if (!TimeDisplayConfig.EnableTimeDisplay) return;
             if (!m_widgetInserted && m_componentPlayer != null && m_componentPlayer.GuiWidget != null) {

@@ -7,6 +7,10 @@ using GameEntitySystem;
 using TemplatesDatabase;
 
 namespace Game {
+    /// <summary>
+    /// 武器自动装填组件: 监听 R 键, 自动从物品栏搜索并递进装填火枪/弩/弓的弹药,
+    /// 支持长按连续装填、装填冷却追踪、模组武器兼容检测
+    /// </summary>
     public class ComponentMusketAutoReload : Component, IUpdateable {
         public ComponentPlayer m_componentPlayer;
         public SubsystemTerrain m_subsystemTerrain;
@@ -14,7 +18,9 @@ namespace Game {
 
         public enum ReloadPattern { None, Musket, Crossbow, Bow }
 
+        /// <summary>武器类型缓存: BlockIndex → 装填模式, 避免每帧反射</summary>
         public static Dictionary<int, ReloadPattern> s_patternCache = new();
+        /// <summary>是否已检测到模组武器(启动时或运行时)</summary>
         public static bool s_hasModWeapons;
         public static Dictionary<int, MethodInfo> s_getLoadState = new();
         public static Dictionary<int, MethodInfo> s_getBulletType = new();
@@ -27,12 +33,18 @@ namespace Game {
         public static HashSet<int> s_loadedOnce = new();
 
         // 长按持续装填
+        /// <summary>长按累计计时器(秒)</summary>
         public float m_reloadTimer;
+        /// <summary>当前正在装填的武器所在槽位</summary>
         public int m_reloadWeaponSlot = -1;
+        /// <summary>本次按住期间是否已成功执行过装填步骤</summary>
         public bool m_didProcessThisHold;
+        /// <summary>首次装填延迟(秒), 防止误触</summary>
         public const float FirstDelay = 0.50f;
+        /// <summary>连续装填间隔(秒)</summary>
         public const float RepeatDelay = 0.04f;
 
+        /// <summary>反射绑定标记: Public + Static</summary>
         public static BindingFlags s_sf = BindingFlags.Public | BindingFlags.Static;
 
         public override void Load(ValuesDictionary valuesDictionary, IdToEntityMap idToEntityMap) {
@@ -41,6 +53,7 @@ namespace Game {
             m_subsystemBlockBehaviors = Project.FindSubsystem<SubsystemBlockBehaviors>(true);
         }
 
+        /// <summary>每帧检测 R 键状态, 处理单次/长按装填逻辑</summary>
         public void Update(float dt) {
             if (m_componentPlayer == null) return;
             var miner = m_componentPlayer.ComponentMiner;
@@ -140,6 +153,7 @@ namespace Game {
             return false;
         }
 
+        /// <summary>尝试上弦弩: 有冷却则提示, 否则将 Draw 设为 15</summary>
         void TryCrankCrossbow(IInventory inv, int slot, int wc, int data, Block block, float cd) {
             if (cd > 0f) { ShowCooldown(); return; }
             int nd = 15;
@@ -183,6 +197,7 @@ namespace Game {
             return false;
         }
 
+        /// <summary>根据火枪 LoadState 推断下一步需要的弹药名称</summary>
         static string GuessNextMusketAmmo(int wc, int data, Block block) {
             if (block is MusketBlock) {
                 return MusketBlock.GetLoadState(data) switch {
@@ -200,6 +215,7 @@ namespace Game {
 
         // ===== 模式检测 =====
 
+        /// <summary>检测武器装填模式: 兼容模式下三级检测(类型继承→behavior绑定→反射签名), 原版模式下仅精确匹配</summary>
         ReloadPattern DetectPattern(int wc, Block block) {
             if (s_patternCache.TryGetValue(wc, out var c)) return c;
 
@@ -245,6 +261,7 @@ namespace Game {
             }
         }
 
+        /// <summary>缓存武器类型检测结果并返回</summary>
         static ReloadPattern Cache(int wc, ReloadPattern p) { s_patternCache[wc] = p; return p; }
 
         // 标记检测到模组武器: 首次命中时写入标记并全局禁用装填冷却
@@ -262,6 +279,7 @@ namespace Game {
             }
         }
 
+        /// <summary>反射缓存武器块类的装填相关静态方法(GetLoadState/GetBulletType/GetDraw/GetArrowType/SetDraw)</summary>
         static void EnsureMethods(Block block, ReloadPattern p) {
             Type t = block.GetType(); int wc = block.BlockIndex;
             if (p == ReloadPattern.Musket && !s_getLoadState.ContainsKey(wc)) {
@@ -278,12 +296,16 @@ namespace Game {
 
         // ===== 提示 =====
 
+        /// <summary>显示装填冷却提示</summary>
         void ShowCooldown() => m_componentPlayer.ComponentGui.DisplaySmallMessage("装填冷却中！", Color.White, true, false);
+        /// <summary>显示缺少弹药提示</summary>
         void ShowMissing(string s) => m_componentPlayer.ComponentGui.DisplaySmallMessage(string.Format("没有可用的 {0}", s), Color.White, true, false);
+        /// <summary>显示已装填提示</summary>
         void ShowLoaded(string s) => m_componentPlayer.ComponentGui.DisplaySmallMessage(string.Format("{0} 已装填", s), Color.White, true, false);
 
         // ===== 工具 =====
 
+        /// <summary>替换指定槽位的物品(m_xxxBlockIndex + 新 data)</summary>
         static void ReplaceSlot(IInventory inv, int slot, int contents, int data) {
             inv.RemoveSlotItems(slot, 1);
             int cc = Terrain.ExtractContents(inv.GetSlotValue(slot));
@@ -291,6 +313,7 @@ namespace Game {
             inv.AddSlotItems(slot, Terrain.MakeBlockValue(cc, 0, data), 1);
         }
 
+        /// <summary>获取物品栏可搜索槽位数(创造模式用 VisibleSlotsCount, 否则用 SlotsCount)</summary>
         static int InvSearchCount(IInventory inv) {
             if (inv is ComponentCreativeInventory) return inv.VisibleSlotsCount;
             return inv.SlotsCount;

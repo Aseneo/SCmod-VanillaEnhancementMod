@@ -4,8 +4,11 @@ using GameEntitySystem;
 
 namespace Game {
     public class TimeDisplayWidget : CanvasWidget {
+        /// <summary>显示时间文字的标签控件</summary>
         public LabelWidget m_label;
+        /// <summary>昼夜时间子系统引用</summary>
         public SubsystemTimeOfDay m_subsystemTimeOfDay;
+        /// <summary>天空子系统引用(用于获取月相)</summary>
         public SubsystemSky m_subsystemSky;
 
         public TimeDisplayWidget() {
@@ -21,6 +24,7 @@ namespace Game {
             Children.Add(m_label);
         }
 
+        /// <summary>每帧检测当前时段(黎明/白昼/黄昏/夜晚/月圆之夜)并更新显示文字与颜色</summary>
         public override void Update() {
             if (m_subsystemTimeOfDay == null) {
                 Project project = GameManager.Project;

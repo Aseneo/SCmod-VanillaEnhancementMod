@@ -5,6 +5,10 @@ using Engine.Graphics;
 using Engine.Input;
 
 namespace Game {
+    /// <summary>
+    /// VanillaEnhancement 模组配置界面: 提供时间显示位置/颜色、武器装填冷却、右键功能等开关的编辑,
+    /// 修改即时写回 TimeDisplayConfig
+    /// </summary>
     public class VanillaEnhancementConfigScreen : Screen {
         // 语言表类名, LanguageControl.Get 需要
         const string N = "VanillaEnhancementConfig";
@@ -34,6 +38,7 @@ namespace Game {
         public bool m_cooldownLocked;
         public Color m_dawnC, m_dayC, m_duskC, m_nightC, m_fullMoonC;
 
+        /// <summary>从 XML 加载 UI 布局, 获取 ContentStack 容器引用</summary>
         public VanillaEnhancementConfigScreen() {
             var node = ContentManager.Get<XElement>("Screens/VanillaEnhancementConfigScreen");
             LoadContents(this, node);

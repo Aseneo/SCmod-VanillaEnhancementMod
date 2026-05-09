@@ -25,7 +25,9 @@ namespace Game {
             }
         }
 
+        /// <summary>记录每个槽位的发射时间(Time.FrameStartTime)</summary>
         public static Dictionary<SlotKey, double> FireTimes = new();
+        /// <summary>记录每个槽位的完整冷却时长(秒)</summary>
         public static Dictionary<SlotKey, float> FullCooldowns = new();
 
         // 由配置文件 + 模组武器检测控制. 为false时RecordFire无操作, GetCooldownRemaining永远返回0
@@ -52,12 +54,14 @@ namespace Game {
             return 0f;
         }
 
+        /// <summary>获取指定槽位的完整冷却时长, 未记录时返回默认 2.5s</summary>
         public static float GetFullCooldown(IInventory inventory, int slotIndex) {
             SlotKey key = new SlotKey(inventory, slotIndex);
             if (FullCooldowns.TryGetValue(key, out float full)) { return full; }
             return 2.5f;
         }
 
+        /// <summary>判断指定方块内容是否为可装填武器(火枪/弩/弓或其缓存变体)</summary>
         public static bool IsReloadableWeapon(int contents) {
             if (contents == 0 || contents >= BlocksManager.Blocks.Length) { return false; }
             if (ComponentMusketAutoReload.s_patternCache.TryGetValue(contents, out ComponentMusketAutoReload.ReloadPattern pattern)) {
@@ -71,6 +75,7 @@ namespace Game {
     // 冷却覆盖层: 在每个 InventorySlotWidget 上叠加一个 LabelWidget 显示冷却倒计时数字
     [HarmonyPatch(typeof(InventorySlotWidget), MethodType.Constructor)]
     static class InventorySlotCooldownOverlayPatch {
+        /// <summary>InventorySlotWidget → 冷却倒计时 LabelWidget 的映射</summary>
         public static Dictionary<InventorySlotWidget, LabelWidget> Labels = new();
 
         static void Postfix(InventorySlotWidget __instance) {
@@ -131,6 +136,7 @@ namespace Game {
     // Prefix 在发射前计算冷却, Postfix 在发射后记录(仅当 LoadState 变为 Empty 时)
     [HarmonyPatch(typeof(SubsystemMusketBlockBehavior), nameof(SubsystemMusketBlockBehavior.OnAim))]
     static class MusketFireDetectionPatch {
+        /// <summary>Prefix 计算后传递给 Postfix 的冷却时长</summary>
         static float s_cooldown;
 
         static bool Prefix(SubsystemMusketBlockBehavior __instance, ComponentMiner componentMiner, AimState state) {
@@ -176,6 +182,7 @@ namespace Game {
     // 弩发射检测: 弩冷却 1.5s 起, 每级-20%, 最低 0.5s
     [HarmonyPatch(typeof(SubsystemCrossbowBlockBehavior), nameof(SubsystemCrossbowBlockBehavior.OnAim))]
     static class CrossbowFireDetectionPatch {
+        /// <summary>Prefix 计算后传递给 Postfix 的冷却时长</summary>
         static float s_cooldown;
 
         static bool Prefix(SubsystemCrossbowBlockBehavior __instance, ComponentMiner componentMiner, AimState state) {
@@ -212,6 +219,7 @@ namespace Game {
     // 弓发射检测: 弓冷却 0.8s 起, 每级-20%, 最低 0.3s
     [HarmonyPatch(typeof(SubsystemBowBlockBehavior), nameof(SubsystemBowBlockBehavior.OnAim))]
     static class BowFireDetectionPatch {
+        /// <summary>Prefix 计算后传递给 Postfix 的冷却时长</summary>
         static float s_cooldown;
 
         static bool Prefix(SubsystemBowBlockBehavior __instance, ComponentMiner componentMiner, AimState state) {
@@ -251,8 +259,11 @@ namespace Game {
     // Prefix 捕获命中前血量, Postfix 将血量归零并在命中后显示有效血量(Health * AttackResilience)
     [HarmonyPatch(typeof(ComponentMiner), nameof(ComponentMiner.Hit))]
     static class InstantKillSpearHitPatch {
+        /// <summary>Prefix 捕获的命中前血量</summary>
         static float s_capturedHealth;
+        /// <summary>Prefix 捕获的伤害抗性系数</summary>
         static float s_attackResilience;
+        /// <summary>本次命中是否应触发秒杀</summary>
         static bool s_shouldInstantKill;
 
         static void Prefix(ComponentMiner __instance, ComponentBody componentBody) {

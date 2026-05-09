@@ -12,10 +12,15 @@ namespace Game {
         public SubsystemAudio m_subsystemAudio;
         public SubsystemTime m_subsystemTime;
         public Random m_random = new();
+        /// <summary>当前正在进食的食物物品值(slotValue), 0 表示未在进食</summary>
         public int m_eatingFoodValue;
+        /// <summary>已进食累计时间(秒)</summary>
         public float m_eatingTime;
+        /// <summary>完成进食所需总时间(秒), 受玩家等级影响</summary>
         public float m_requiredTime;
+        /// <summary>咀嚼音效播放计时器</summary>
         public float m_chewSoundTimer;
+        /// <summary>当前播放的咀嚼音效实例</summary>
         public Sound m_currentChewSound;
 
         public UpdateOrder UpdateOrder => UpdateOrder.Default;
