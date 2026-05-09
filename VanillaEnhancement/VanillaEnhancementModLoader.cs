@@ -29,7 +29,7 @@ namespace Game {
             rightBottomBar.Children.Add(new BevelledButtonWidget {
                 Name = "VanillaEnhancementConfigButton",
                 Text = LanguageControl.Get("VanillaEnhancementConfig", 29),
-                Size = new Vector2(48, 48),
+                Size = new Vector2(60, 60),
                 FontScale = 1.2f
             });
         }

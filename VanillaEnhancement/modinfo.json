@@ -8,8 +8,8 @@
   "LoadOrder": 10000,
   "NonPersistentMod": false,
   "GameplayImpactLevel": "Turbo",
-  "Link": "",
-  "Author": "",
+  "Link": "https://github.com/Aseneo/SCmod-VanillaEnhancementMod",
+  "Author": "Aseneo",
   "PackageName": "com.vanillaenhancement.test",
   "Dependencies": {}
 }
