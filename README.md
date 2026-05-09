@@ -12,8 +12,6 @@
 
 本模组VanillaEnhancement为基于Survivalcraft API 1.9.0.2 创作的增强型模组，为原版游戏添加了一系列 QoL 辅助功能和测试工具。
 
-## Github链接：
-同项目github: https://github.com/Aseneo/SCmod-VanillaEnhancementMod
 
 ## 目录结构
 
