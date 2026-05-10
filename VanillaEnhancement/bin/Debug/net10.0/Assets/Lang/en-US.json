@@ -25,10 +25,13 @@
     "22": "On",
     "23": "Off",
     "24": "Auto-disabled after detecting mod weapons",
-    "25": "Top-Left",
+    "25": "Left",
     "26": "Center",
-    "27": "Bottom-Right",
+    "27": "Right",
     "28": "Fill",
-    "29": "V"
+    "29": "V",
+    "30": "Top",
+    "31": "Center",
+    "32": "Bottom"
   }
 }

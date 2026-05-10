@@ -2,9 +2,9 @@ using Engine;
 
 namespace Game {
     public static class TimeDisplayConfig {
-        /// <summary>时间控件水平对齐方式: Near=左上, Center=居中, Far=右下, Stretch=拉伸铺满</summary>
+        /// <summary>时间控件水平对齐方式: Near=左, Center=中, Far=下, Stretch=拉伸铺满</summary>
         public static WidgetAlignment HorizontalAlignment = WidgetAlignment.Near;
-        /// <summary>时间控件垂直对齐方式: Near=左上, Center=居中, Far=右下, Stretch=拉伸铺满</summary>
+        /// <summary>时间控件垂直对齐方式: Near=上, Center=中, Far=下, Stretch=拉伸铺满</summary>
         public static WidgetAlignment VerticalAlignment = WidgetAlignment.Far;
         public static float MarginLeft = 10f;
         public static float MarginBottom = 10f;

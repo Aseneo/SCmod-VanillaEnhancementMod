@@ -17,11 +17,19 @@ namespace Game {
         // 开关文字
         static string On => T(22);
         static string Off => T(23);
-        // 对齐值 → 本地化名称 (左上/居中/右下/拉伸铺满)
-        static string AlignLabel(WidgetAlignment a) => a switch {
+
+        // 对齐值 → 本地化名称 (左/中/右/拉伸铺满)
+        static string AlignHLabel(WidgetAlignment a) => a switch {
             WidgetAlignment.Near => T(25),
             WidgetAlignment.Center => T(26),
             WidgetAlignment.Far => T(27),
+            _ => T(28)
+        };
+        // 对齐值 → 本地化名称 (上/中/下/拉伸铺满)
+        static string AlignVLabel(WidgetAlignment a) => a switch {
+            WidgetAlignment.Near => T(30),
+            WidgetAlignment.Center => T(31),
+            WidgetAlignment.Far => T(32),
             _ => T(28)
         };
 
@@ -67,8 +75,8 @@ namespace Game {
             AddHeadline(T(1));       // 时间显示
             m_timeDisplayBtn = AddToggleRow(T(8), m_timeDisplay);
             AddHeadline(T(2));       // 显示位置
-            m_alignHBtn = AddCycleRow(T(9), m_alignH);
-            m_alignVBtn = AddCycleRow(T(10), m_alignV);
+            m_alignHBtn = AddCycleRow(T(9), m_alignH, true);
+            m_alignVBtn = AddCycleRow(T(10), m_alignV, false);
             AddHeadline(T(3));       // 显示样式
             m_shadowBtn = AddToggleRow(T(11), m_shadow);
             AddHeadline(T(4));       // 时段颜色
@@ -95,8 +103,8 @@ namespace Game {
                 ScreensManager.GoBack();
                 return;
             }
-            if (m_alignHBtn != null && m_alignHBtn.IsClicked) { m_alignH = Cycle(m_alignH); m_alignHBtn.Text = AlignLabel(m_alignH); }
-            if (m_alignVBtn != null && m_alignVBtn.IsClicked) { m_alignV = Cycle(m_alignV); m_alignVBtn.Text = AlignLabel(m_alignV); }
+            if (m_alignHBtn != null && m_alignHBtn.IsClicked) { m_alignH = Cycle(m_alignH); m_alignHBtn.Text = AlignHLabel(m_alignH); }
+            if (m_alignVBtn != null && m_alignVBtn.IsClicked) { m_alignV = Cycle(m_alignV); m_alignVBtn.Text = AlignVLabel(m_alignV); }
             if (m_shadowBtn != null && m_shadowBtn.IsClicked) { m_shadow = !m_shadow; m_shadowBtn.Text = m_shadow ? On : Off; }
             if (m_cooldownBtn != null && !m_cooldownLocked && m_cooldownBtn.IsClicked) { m_cooldown = !m_cooldown; m_cooldownBtn.Text = m_cooldown ? On : Off; }
             if (m_timeDisplayBtn != null && m_timeDisplayBtn.IsClicked) { m_timeDisplay = !m_timeDisplay; m_timeDisplayBtn.Text = m_timeDisplay ? On : Off; }
@@ -138,10 +146,10 @@ namespace Game {
         });
 
         // 循环切换行: Near→Center→Far→Stretch, 显示本地化文字
-        BevelledButtonWidget AddCycleRow(string label, WidgetAlignment cur) {
+        BevelledButtonWidget AddCycleRow(string label, WidgetAlignment cur, bool isHorizontal) {
             var p = new UniformSpacingPanelWidget { Direction = LayoutDirection.Horizontal, Margin = new Vector2(0, 3) };
             p.Children.Add(new LabelWidget { Text = label, HorizontalAlignment = WidgetAlignment.Far, VerticalAlignment = WidgetAlignment.Center, Margin = new Vector2(20, 0) });
-            var b = new BevelledButtonWidget { Text = AlignLabel(cur), Style = ContentManager.Get<XElement>("Styles/ButtonStyle_310x60"), VerticalAlignment = WidgetAlignment.Center, Margin = new Vector2(20, 0) };
+            var b = new BevelledButtonWidget { Text = isHorizontal ? AlignHLabel(cur) : AlignVLabel(cur), Style = ContentManager.Get<XElement>("Styles/ButtonStyle_310x60"), VerticalAlignment = WidgetAlignment.Center, Margin = new Vector2(20, 0) };
             p.Children.Add(b);
             m_contentStack.Children.Add(p);
             return b;

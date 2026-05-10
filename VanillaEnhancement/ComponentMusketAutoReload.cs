@@ -29,16 +29,18 @@ namespace Game {
         public static Dictionary<int, MethodInfo> s_setDraw = new();
         // 兜底: 任意 Get*Type(int) 方法缓存(用于检测已装填)
         public static Dictionary<int, MethodInfo> s_anyTypeGetter = new();
-        // 持久记录已确认装填过的武器类型(wc), 跨按键保持. 条件: behavior 曾成功处理过弹药
-        public static HashSet<int> s_loadedOnce = new();
+        // 弹药类型记忆：记录behavior曾确认兼容的弹药值，用于跨次按键判断是否有弹药
+        public static Dictionary<int, HashSet<int>> s_compatibleAmmo = new();
 
         // 长按持续装填
         /// <summary>长按累计计时器(秒)</summary>
         public float m_reloadTimer;
         /// <summary>当前正在装填的武器所在槽位</summary>
         public int m_reloadWeaponSlot = -1;
-        /// <summary>本次按住期间是否已成功执行过装填步骤</summary>
+        /// <summary>本次按住期间是否已至少成功装填一步</summary>
         public bool m_didProcessThisHold;
+        /// <summary>本次按键期间behavior是否确认背包中有兼容弹药</summary>
+        public bool m_foundAmmo;
         /// <summary>首次装填延迟(秒), 防止误触</summary>
         public const float FirstDelay = 0.50f;
         /// <summary>连续装填间隔(秒)</summary>
@@ -79,6 +81,7 @@ namespace Game {
                 m_reloadTimer = 0f;
                 m_reloadWeaponSlot = slot;
                 m_didProcessThisHold = false;
+                m_foundAmmo = false;
                 bool ok = ProcessSingleStep(inv, slot, wc, sv, block, wb, p);
                 if (ok) { m_didProcessThisHold = true; return; }
                 ShowFinalStatus(inv, slot, wc, sv, block, p);
@@ -92,7 +95,7 @@ namespace Game {
                     bool ok = ProcessSingleStep(inv, slot, wc, sv, block, wb, p);
                     if (ok) { m_didProcessThisHold = true; return; }
                     ShowFinalStatus(inv, slot, wc, sv, block, p);
-                    m_reloadTimer = -10f;
+                    m_reloadTimer = -FirstDelay;
                 }
             }
         }
@@ -104,18 +107,17 @@ namespace Game {
             bool ok;
             if (p == ReloadPattern.Crossbow) {
                 ok = TryProcessAmmo(inv, slot, wc, data, p, wb, cd);
-                if (!ok && !IsAlreadyLoaded(wc, data, block)) { TryCrankCrossbow(inv, slot, wc, data, block, cd); }
+                if (!ok && !m_foundAmmo && !IsAlreadyLoaded(wc, data, block)) { ok = TryCrankCrossbow(inv, slot, wc, data, block, cd); }
             } else {
                 ok = TryProcessAmmo(inv, slot, wc, data, p, wb, cd);
             }
-            if (ok) s_loadedOnce.Add(wc);
             return ok;
         }
 
         // 停止持续装填时显示最终状态
         void ShowFinalStatus(IInventory inv, int slot, int wc, int sv, Block block, ReloadPattern p) {
             int data = Terrain.ExtractData(sv);
-            bool loaded = m_didProcessThisHold || IsAlreadyLoaded(wc, data, block) || s_loadedOnce.Contains(wc);
+            bool loaded = m_didProcessThisHold || IsAlreadyLoaded(wc, data, block) || m_foundAmmo || HasCompatibleAmmo(wc, inv);
             if (loaded) {
                 ShowLoaded(block.GetDisplayName(m_subsystemTerrain, Terrain.MakeBlockValue(wc, 0, data)));
             }
@@ -123,7 +125,6 @@ namespace Game {
                 ShowMissing(GuessNextMusketAmmo(wc, data, block));
             }
             else if (p == ReloadPattern.Crossbow) {
-                int draw = block is CrossbowBlock ? CrossbowBlock.GetDraw(data) : (int)s_getDraw[wc].Invoke(null, [data]);
                 ShowMissing("弩箭");
             }
             else if (p == ReloadPattern.Bow) {
@@ -141,12 +142,17 @@ namespace Game {
                 if (inv.GetSlotCount(i) <= 0) continue;
                 foreach (var bh in wb) {
                     if (bh.GetProcessInventoryItemCapacity(inv, slot, isv) > 0) {
-                        if (cd > 0f) { ShowCooldown(); return true; }
-                        bh.ProcessInventoryItem(inv, slot, isv, 1, 1, out _, out _);
-                        // 如果处理装填的 behavior 不是三个原版类之一, 说明是模组自定义武器, 禁用冷却
-                        if (bh is not (SubsystemMusketBlockBehavior or SubsystemCrossbowBlockBehavior or SubsystemBowBlockBehavior))
-                            MarkModWeapon();
-                        return true;
+                        m_foundAmmo = true;
+                        RecordAmmo(wc, isv);
+                        if (cd > 0f) { ShowCooldown(); return false; }
+                        int before = inv.GetSlotValue(slot);
+                        bh.ProcessInventoryItem(inv, slot, isv, 1, 1, out int pv, out int pc);
+                        if (pc == 0) { inv.RemoveSlotItems(i, 1); }
+                        if (inv.GetSlotValue(slot) != before) {
+                            if (bh is not (SubsystemMusketBlockBehavior or SubsystemCrossbowBlockBehavior or SubsystemBowBlockBehavior))
+                                MarkModWeapon();
+                            return true;
+                        }
                     }
                 }
             }
@@ -154,26 +160,49 @@ namespace Game {
         }
 
         /// <summary>尝试上弦弩: 有冷却则提示, 否则将 Draw 设为 15</summary>
-        void TryCrankCrossbow(IInventory inv, int slot, int wc, int data, Block block, float cd) {
-            if (cd > 0f) { ShowCooldown(); return; }
+        bool TryCrankCrossbow(IInventory inv, int slot, int wc, int data, Block block, float cd) {
+            if (cd > 0f) { ShowCooldown(); return false; }
+            int curDraw = block is CrossbowBlock ? CrossbowBlock.GetDraw(data) : (int)s_getDraw[wc].Invoke(null, [data]);
+            if (curDraw >= 15) return false;
             int nd = 15;
             if (block is CrossbowBlock)
                 ReplaceSlot(inv, slot, wc, CrossbowBlock.SetDraw(data, nd));
             else
                 ReplaceSlot(inv, slot, wc, (int)s_setDraw[wc].Invoke(null, [data, nd]));
+            return true;
         }
 
         // ===== 装填状态判断 =====
 
+        static void RecordAmmo(int wc, int ammoValue) {
+            if (!s_compatibleAmmo.TryGetValue(wc, out var set))
+                s_compatibleAmmo[wc] = set = new HashSet<int>();
+            set.Add(ammoValue);
+        }
+
+        static bool HasCompatibleAmmo(int wc, IInventory inv) {
+            if (!s_compatibleAmmo.TryGetValue(wc, out var set)) return false;
+            int sc = InvSearchCount(inv);
+            for (int i = 0; i < sc; i++) {
+                if (set.Contains(inv.GetSlotValue(i)) && inv.GetSlotCount(i) > 0)
+                    return true;
+            }
+            return false;
+        }
+
         // 弹药类型检测: GetBulletType/GetArrowType 非null → 已装填
         // 兜底: 遍历块类所有 Get*Type(int) 方法, 任一个返回非null即视为已装填
         bool IsAlreadyLoaded(int wc, int data, Block block) {
-            if (block is MusketBlock) return MusketBlock.GetBulletType(data).HasValue;
+            if (block is MusketBlock) return MusketBlock.GetLoadState(data) == MusketBlock.LoadState.Loaded;
             if (block is CrossbowBlock) return CrossbowBlock.GetArrowType(data).HasValue && CrossbowBlock.GetDraw(data) >= 15;
             if (block is BowBlock) return BowBlock.GetArrowType(data).HasValue;
 
             // 已缓存的读取方法
-            if (s_getBulletType.TryGetValue(wc, out var mb) && mb != null) return mb.Invoke(null, [data]) != null;
+            if (s_getBulletType.TryGetValue(wc, out var mb) && mb != null) {
+                if (s_getLoadState.TryGetValue(wc, out var mls) && mls != null && (int)mls.Invoke(null, [data]) == 0)
+                    return false;
+                return mb.Invoke(null, [data]) != null;
+            }
             if (s_getArrowType.TryGetValue(wc, out var ma) && ma != null) {
                 object at = ma.Invoke(null, [data]);
                 if (at != null) return !s_getDraw.ContainsKey(wc) || (int)s_getDraw[wc].Invoke(null, [data]) >= 15;
