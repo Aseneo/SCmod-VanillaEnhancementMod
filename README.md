@@ -63,7 +63,7 @@ VanillaEnhancement/
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `EnableTimeDisplay` | `true` | 时间显示开关 |
-| `HorizontalAlignment` | `Near` | 水平位置（左上/居中/右下/拉伸铺满） |
+| `HorizontalAlignment` | `Near` | 水平位置（左/中/右/拉伸铺满） |
 | `VerticalAlignment` | `Far` | 垂直位置（上/中/下） |
 | `DropShadow` | `true` | 文字阴影 |
 | `DawnSegmentColor` | `255,200,128` | 黎明时段颜色 |

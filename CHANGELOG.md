@@ -1,5 +1,27 @@
 # 更新日志
 
+## v0.0.10 — 2026-05-10
+
+### 修复
+- **弹药消耗**: 修复使用R键装填后弹药不消耗的致命BUG。`ProcessInventoryItem`只更新武器槽状态不消耗弹药，现根据`pc==0`手动调用`RemoveSlotItems`移除弹药。
+- **火枪已装填误判**: 发射后`BulletType`残留导致空枪被误判为已装填，改为`LoadState==Loaded`判断。
+- **模组武器空枪误判**: `IsAlreadyLoaded`新增`GetLoadState==0`检测，避免模组火枪类武器发射后误判。
+- **弩拉弦误报**: `TryCrankCrossbow`改为返回`bool`并检查是否已拉满(`curDraw>=15`)，修复拉弦满后误显示"没有可用的弩箭"。
+- **长按满弹后误报**: 满弹后`m_reloadTimer`从`-10f`改为`-FirstDelay`，避免刷屏。
+- **配置界面按钮文字**: 水平位置按钮从"左上/居中/右下"改为"左/中/右"，垂直位置按钮从统一的"左上/居中/右下"改为"上/中/下"，各自独立显示。
+
+### 新增
+- **弹药类型记录系统** (`s_compatibleAmmo`): behavior确认兼容的弹药值记录到`Dictionary<武器类型, HashSet<弹药值>>`，支持跨次按键判断。
+- **`m_foundAmmo` 字段**: 本次按键期间behavior是否确认背包中有兼容弹药，替换不可靠的`s_loadedOnce`跨按键记忆机制。
+- **`HasCompatibleAmmo` 方法**: 遍历背包检查是否含有曾记录过的兼容弹药，支持多弹药类型武器。
+
+### 修改
+- **`ShowFinalStatus` 状态判断**: 从`s_loadedOnce.Contains(wc)`改为`m_didProcessThisHold || IsAlreadyLoaded || m_foundAmmo || HasCompatibleAmmo`四条件判断。
+- **`TryProcessAmmo` 核心逻辑**: 比较`ProcessInventoryItem`前后slotValue变化来判断是否真正装填成功，避免behavior返回但未消费时的误判。
+- **弩拉弦触发条件**: `ProcessSingleStep`中仅在`!m_foundAmmo`时尝试拉弦，有弹药时不再重复拉弦。
+
+---
+
 ## v0.0.9 — 2026-05-10
 
 ### 新增
